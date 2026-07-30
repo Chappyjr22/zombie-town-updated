@@ -147,13 +147,41 @@ func die(hit_impulse: Vector3 = Vector3.ZERO) -> void:
 	if skeleton:
 		_isolate_ragdoll_bones()
 		if physical_bone_simulator:
-			physical_bone_simulator.physical_bones_start_simulation()
+			physical_bone_simulator.physical_bones_start_simulation(_ragdoll_bone_names())
 		var bone := _find_impulse_bone(skeleton)
 		if bone and hit_impulse.length() > 0.0:
 			bone.apply_central_impulse(hit_impulse)
 
 	if corpse_lifetime > 0.0:
 		get_tree().create_timer(corpse_lifetime).timeout.connect(queue_free)
+
+
+## This rig has small detail bones beyond the main skeleton (fingers, tongue,
+## eyelids, IK pole targets) - simulating physics on all of them made the
+## corpse's mesh stretch into long spikes, since a lightweight bone like a
+## tongue segment gets flung around by physics forces and drags its narrow
+## skin weighting into a thin stretched blob. Excluding them by name pattern
+## and simulating only the main body chain (torso/limbs/head) avoids that.
+const RAGDOLL_EXCLUDE_PATTERNS := [
+	"tongue", "eyelid", "pinky", "middle", "index", "thumb", "poletarget", "_end",
+]
+
+
+func _ragdoll_bone_names() -> Array:
+	var names: Array = []
+	if skeleton == null:
+		return names
+	for i in range(skeleton.get_bone_count()):
+		var bone_name: String = skeleton.get_bone_name(i)
+		var lower := bone_name.to_lower()
+		var excluded := false
+		for pattern in RAGDOLL_EXCLUDE_PATTERNS:
+			if lower.contains(pattern):
+				excluded = true
+				break
+		if not excluded:
+			names.append(bone_name)
+	return names
 
 
 ## Ragdoll bones only collide with the world (ground), never the player or
