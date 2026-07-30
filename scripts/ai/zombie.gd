@@ -131,26 +131,23 @@ func take_damage(amount: float, hit_impulse: Vector3 = Vector3.ZERO) -> void:
 		_play_anim(["HitReact", "HitRecieve"])
 
 
-func die(hit_impulse: Vector3 = Vector3.ZERO) -> void:
+func die(_hit_impulse: Vector3 = Vector3.ZERO) -> void:
 	state = State.DEAD
 	set_physics_process(false)
-	if anim_player:
-		# stop(true) keeps the current pose instead of snapping back to the rest
-		# pose - plain stop() reset the skeleton to bind pose before physics
-		# simulation captured it, so every bone suddenly overlapped its neighbor
-		# and the physics engine violently shoved them apart to resolve it
-		# (the "zombies went flying" bug).
-		anim_player.stop(true)
 	if collision_shape:
 		collision_shape.disabled = true
 
-	if skeleton:
-		_isolate_ragdoll_bones()
-		if physical_bone_simulator:
-			physical_bone_simulator.physical_bones_start_simulation(_ragdoll_bone_names())
-		var bone := _find_impulse_bone(skeleton)
-		if bone and hit_impulse.length() > 0.0:
-			bone.apply_central_impulse(hit_impulse)
+	# Physics ragdoll (PhysicalBoneSimulator3D) kept stretching limbs into long
+	# spikes on this rig even after excluding finger/tongue/eyelid bones - a
+	# deeper joint/shape mismatch that needs hands-on tuning in the editor to
+	# fix properly. Falling back to the model's own authored "Death" clip
+	# instead: no physics tuning needed, and it's guaranteed to look right
+	# since it's professionally animated. `_play_anim` leaves it holding on
+	# its last frame once finished, which is exactly the collapsed pose we
+	# want for a corpse. Revisit physics ragdoll later if it's worth another
+	# pass - see PhysicsLayers.RAGDOLL / _isolate_ragdoll_bones /
+	# _ragdoll_bone_names below, still here but unused for now.
+	_play_anim(["Death"])
 
 	if corpse_lifetime > 0.0:
 		get_tree().create_timer(corpse_lifetime).timeout.connect(queue_free)
