@@ -11,15 +11,25 @@ const STAND_HEIGHT := 1.8
 const CROUCH_HEIGHT := 1.1
 const CROUCH_LERP_SPEED := 10.0
 
+## Visual layer the third-person body mesh is moved onto so the local camera can
+## exclude it (see _hide_own_body_from_camera). Any layer other than 1 (the
+## default everything-else layer) works; just has to not collide with something
+## else's chosen layer later.
+const BODY_VISUAL_LAYER := 2
+
 @export var max_health: float = 100.0
 
 @onready var head: Node3D = $Head
 @onready var collision_shape: CollisionShape3D = $CollisionShape3D
+@onready var model: Node3D = $Model
+@onready var camera: Camera3D = $Head/Camera3D
+@onready var anim_player: AnimationPlayer = NodeUtils.find_first_of_type(model, "AnimationPlayer")
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var is_crouching := false
 var health: float
 var is_dead := false
+var was_on_floor := true
 
 signal health_changed(current: float, max: float)
 signal died
@@ -29,6 +39,13 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	health = max_health
 	add_to_group("player")
+	_hide_own_body_from_camera()
+
+
+func _hide_own_body_from_camera() -> void:
+	for mesh in NodeUtils.find_all_of_type(model, "MeshInstance3D"):
+		mesh.layers = 1 << (BODY_VISUAL_LAYER - 1)
+	camera.set_cull_mask_value(BODY_VISUAL_LAYER, false)
 
 
 func take_damage(amount: float) -> void:
@@ -79,6 +96,10 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 
+	var just_landed := is_on_floor() and not was_on_floor
+	was_on_floor = is_on_floor()
+	_update_animation(just_landed)
+
 
 func _update_crouch(delta: float) -> void:
 	is_crouching = Input.is_action_pressed("crouch")
@@ -87,3 +108,23 @@ func _update_crouch(delta: float) -> void:
 	shape.height = move_toward(shape.height, target_height, CROUCH_LERP_SPEED * delta)
 	collision_shape.position.y = shape.height / 2.0
 	head.position.y = shape.height - 0.15
+
+
+func _update_animation(just_landed: bool) -> void:
+	if anim_player == null:
+		return
+	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
+	if not is_on_floor():
+		_play_anim(["Jump_Idle", "Jump"])
+	elif just_landed:
+		_play_anim(["Jump_Land", "Idle"])
+	elif is_crouching:
+		_play_anim(["Duck", "Idle"])
+	elif horizontal_speed > 0.5:
+		_play_anim(["Run_Gun", "Run"])
+	else:
+		_play_anim(["Idle_Shoot", "Idle"])
+
+
+func _play_anim(names: Array) -> void:
+	NodeUtils.play_first_available_animation(anim_player, names)

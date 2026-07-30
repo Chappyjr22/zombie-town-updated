@@ -18,8 +18,8 @@ var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 
 @onready var collision_shape: CollisionShape3D = $CollisionShape3D
 @onready var model: Node3D = $Model
-@onready var anim_player: AnimationPlayer = _find_first_of_type(model, "AnimationPlayer")
-@onready var skeleton: Skeleton3D = _find_first_of_type(model, "Skeleton3D")
+@onready var anim_player: AnimationPlayer = NodeUtils.find_first_of_type(model, "AnimationPlayer")
+@onready var skeleton: Skeleton3D = NodeUtils.find_first_of_type(model, "Skeleton3D")
 
 
 func _ready() -> void:
@@ -137,17 +137,7 @@ func _find_impulse_bone(root: Node) -> PhysicalBone3D:
 
 
 func _play_anim(names: Array) -> void:
-	if anim_player == null:
-		return
-	for n in names:
-		if anim_player.has_animation(n):
-			anim_player.play(n)
-			return
-		# baked clips are often prefixed, e.g. "CharacterArmature|Death"
-		for lib_name in anim_player.get_animation_list():
-			if lib_name.ends_with("|" + n) or lib_name == n:
-				anim_player.play(lib_name)
-				return
+	NodeUtils.play_first_available_animation(anim_player, names)
 
 
 func _update_animation() -> void:
@@ -158,15 +148,3 @@ func _update_animation() -> void:
 			_play_anim(["Idle"])
 		State.ATTACK:
 			pass # handled by _attack()
-
-
-static func _find_first_of_type(root: Node, type_name: String) -> Node:
-	if root == null:
-		return null
-	for child in root.get_children():
-		if child.get_class() == type_name:
-			return child
-		var found := _find_first_of_type(child, type_name)
-		if found:
-			return found
-	return null

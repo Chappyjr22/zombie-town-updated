@@ -92,6 +92,11 @@ func _hitscan() -> void:
 	var origin := camera.global_position
 	var target := origin - camera.global_transform.basis.z * current_weapon.range
 	var query := PhysicsRayQueryParameters3D.create(origin, target)
+	# `owner` is the WeaponController's scene root - the Player CharacterBody3D it's
+	# nested under in player.tscn. Excluded so the ray can't clip the shooter's own
+	# collision capsule when aiming down/close to their own body.
+	if owner and owner is CollisionObject3D:
+		query.exclude = [owner.get_rid()]
 	var result := space_state.intersect_ray(query)
 	if result and result.has("collider") and result.collider.has_method("take_damage"):
 		result.collider.take_damage(current_weapon.damage)
