@@ -28,6 +28,16 @@ func _ready() -> void:
 	collision_layer = PhysicsLayers.ACTORS
 	collision_mask = PhysicsLayers.WORLD | PhysicsLayers.ACTORS
 
+	# "Create Physical Skeleton" in the editor adds PhysicalBone3D nodes that
+	# exist (and can collide) immediately, even before physical_bones_start_simulation()
+	# is ever called - they were still on the default layer, which overlapped
+	# this zombie's own standing capsule collider from frame one, so it
+	# exploded on its own the instant the scene loaded, with no death involved.
+	# Isolating them onto the RAGDOLL layer here, not just in die(), fixes that.
+	_isolate_ragdoll_bones()
+	if skeleton:
+		skeleton.physical_bones_stop_simulation()
+
 
 func _physics_process(delta: float) -> void:
 	if state == State.DEAD:
@@ -118,20 +128,27 @@ func die(hit_impulse: Vector3 = Vector3.ZERO) -> void:
 		collision_shape.disabled = true
 
 	if skeleton:
+		_isolate_ragdoll_bones()
 		skeleton.physical_bones_start_simulation()
-		# Ragdoll bones only collide with the world (ground), never the player or
-		# other zombies - otherwise a corpse spawning mid-overlap with an actor's
-		# capsule (common, since zombies die at melee range) gets violently
-		# shoved apart by the physics engine instead of just falling over.
-		for physical_bone in NodeUtils.find_all_of_type(skeleton, "PhysicalBone3D"):
-			physical_bone.collision_layer = PhysicsLayers.RAGDOLL
-			physical_bone.collision_mask = PhysicsLayers.WORLD
 		var bone := _find_impulse_bone(skeleton)
 		if bone and hit_impulse.length() > 0.0:
 			bone.apply_central_impulse(hit_impulse)
 
 	if corpse_lifetime > 0.0:
 		get_tree().create_timer(corpse_lifetime).timeout.connect(queue_free)
+
+
+## Ragdoll bones only collide with the world (ground), never the player or
+## other zombies - otherwise they overlap a living actor's capsule (either
+## this zombie's own, from the moment "Create Physical Skeleton" adds them, or
+## another actor's at death since zombies die at melee range) and the physics
+## engine violently shoves them apart instead of just resting/falling over.
+func _isolate_ragdoll_bones() -> void:
+	if skeleton == null:
+		return
+	for physical_bone in NodeUtils.find_all_of_type(skeleton, "PhysicalBone3D"):
+		physical_bone.collision_layer = PhysicsLayers.RAGDOLL
+		physical_bone.collision_mask = PhysicsLayers.WORLD
 
 
 func _find_impulse_bone(root: Node) -> PhysicalBone3D:
