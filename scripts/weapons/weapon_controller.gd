@@ -1,12 +1,15 @@
 extends Node3D
 class_name WeaponController
 
-## Positions the equipped weapon model relative to the camera. Untested outside
-## the editor - the FBX models weren't authored with a defined grip point, so
-## this offset/rotation almost certainly needs visual tuning once someone can
-## actually look at it in Godot.
-@export var view_model_offset := Vector3(0.25, -0.25, -0.5)
-@export var view_model_scale := 1.0
+## Where the weapon model's center lands relative to the camera, after scaling.
+## A fixed scale/position guess (no idea how big each FBX's own units actually
+## are) made the first gun fill the entire screen - this now scales each model
+## from its real measured size instead of a hardcoded number, so it's at least
+## a *reasonable* size regardless of how the source file was authored. It may
+## still face/tilt the wrong way (rotation isn't addressed here) since that
+## needs someone looking at it to judge.
+@export var view_model_offset := Vector3(0.25, -0.2, -0.4)
+@export var target_view_model_size := 0.45 ## world-space size of the model's longest dimension after scaling
 @export var starting_weapon: WeaponData
 
 var camera: Camera3D
@@ -44,10 +47,47 @@ func equip(weapon: WeaponData) -> void:
 	if weapon.model_scene:
 		current_model = weapon.model_scene.instantiate()
 		add_child(current_model)
-		current_model.position = view_model_offset
-		current_model.scale = Vector3.ONE * view_model_scale
+		_fit_view_model(current_model)
 
 	ammo_changed.emit(ammo_in_mag, reserve_ammo)
+
+
+## Measures the model's actual mesh bounds and scales/positions it so its
+## longest dimension matches target_view_model_size and its visual center
+## lands at view_model_offset - regardless of how the source FBX/glTF was
+## authored (scale, pivot location, units).
+func _fit_view_model(model: Node3D) -> void:
+	var combined := AABB()
+	var found_any := false
+
+	for mesh_instance in NodeUtils.find_all_of_type(model, "MeshInstance3D"):
+		if not (mesh_instance is MeshInstance3D) or mesh_instance.mesh == null:
+			continue
+		var local_xform := model.global_transform.affine_inverse() * mesh_instance.global_transform
+		var mesh_aabb: AABB = mesh_instance.mesh.get_aabb()
+		for i in range(8):
+			var corner := mesh_aabb.position + Vector3(
+				mesh_aabb.size.x * float(i & 1),
+				mesh_aabb.size.y * float((i >> 1) & 1),
+				mesh_aabb.size.z * float((i >> 2) & 1)
+			)
+			var world_corner: Vector3 = local_xform * corner
+			if not found_any:
+				combined = AABB(world_corner, Vector3.ZERO)
+				found_any = true
+			else:
+				combined = combined.expand(world_corner)
+
+	if not found_any:
+		return
+
+	var largest_dim: float = max(combined.size.x, max(combined.size.y, combined.size.z))
+	if largest_dim <= 0.0001:
+		return
+
+	var scale_factor := target_view_model_size / largest_dim
+	model.scale = Vector3.ONE * scale_factor
+	model.position = view_model_offset - combined.get_center() * scale_factor
 
 
 func _process(delta: float) -> void:

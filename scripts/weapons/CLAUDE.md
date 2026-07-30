@@ -15,6 +15,6 @@ Depends on: `assets/models/weapons` (see `ASSET_MANIFEST.md` for which models ex
 
 - **Shotguns fire a single hitscan ray**, not a pellet spread. `shotgun.tres` and `shotgun_sawedoff.tres` compensate with a higher flat `damage`, but a real multi-pellet cone (several raycasts per trigger pull) would feel more shotgun-like. Worth revisiting.
 - **No weapon switching yet** — the player always starts with (and is stuck on) the assault rifle. Swapping `WeaponController.equip()` to a different `WeaponData` at runtime already works; there's just no input/UI wired to trigger it.
-- **View-model placement is unverified.** `view_model_offset`/`view_model_scale` on `WeaponController` are a guess (no grip point authored on the FBX models, and this session can't open the Godot editor to look). Expect to need visual tuning.
+- **View-model rotation is still unaddressed.** `_fit_view_model()` (in `equip()`) measures each model's actual mesh bounds and scales/positions it to a sane on-screen size automatically — this fixed the first real bug found (a fixed guessed scale made the gun fill the entire screen, since the FBX was real-world-meter-sized and the guess put it 0.5m from the camera at 1:1 scale). Rotation isn't touched, though, so the model may still face/tilt the wrong way — that needs eyes on it to judge and fix (likely a per-weapon or per-pack rotation offset).
 - **No muzzle flash / tracer / impact VFX yet.**
-- `take_damage(amount)` is called on raycast hits but nothing implements it yet — that's `scripts/ai`'s job once zombies exist.
+- `take_damage(amount)` is called on raycast hits and is implemented by `scripts/ai/zombie.gd`.

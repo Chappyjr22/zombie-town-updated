@@ -106,7 +106,12 @@ func die(hit_impulse: Vector3 = Vector3.ZERO) -> void:
 	state = State.DEAD
 	set_physics_process(false)
 	if anim_player:
-		anim_player.stop()
+		# stop(true) keeps the current pose instead of snapping back to the rest
+		# pose - plain stop() reset the skeleton to bind pose before physics
+		# simulation captured it, so every bone suddenly overlapped its neighbor
+		# and the physics engine violently shoved them apart to resolve it
+		# (the "zombies went flying" bug).
+		anim_player.stop(true)
 	if collision_shape:
 		collision_shape.disabled = true
 
