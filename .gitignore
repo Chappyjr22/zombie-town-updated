@@ -1,0 +1,17 @@
+# Godot 4
+.godot/
+.import/
+export_presets.cfg
+*.translation
+
+# Exported builds (published to itch.io via butler instead)
+build/*
+!build/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+*.tmp
