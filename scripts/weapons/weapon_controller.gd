@@ -140,7 +140,7 @@ func _hitscan() -> void:
 		return
 	var space_state := camera.get_world_3d().direct_space_state
 	var origin := camera.global_position
-	var target := origin - camera.global_transform.basis.z * current_weapon.range
+	var target := origin - camera.global_transform.basis.z * current_weapon.weapon_range
 	var query := PhysicsRayQueryParameters3D.create(origin, target)
 	# `owner` is the WeaponController's scene root - the Player CharacterBody3D it's
 	# nested under in player.tscn. Excluded so the ray can't clip the shooter's own

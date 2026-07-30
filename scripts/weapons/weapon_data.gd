@@ -10,5 +10,5 @@ class_name WeaponData
 @export var is_automatic: bool = true
 @export var mag_size: int = 30
 @export var reload_time: float = 2.0
-@export var range: float = 120.0
+@export var weapon_range: float = 120.0 ## named weapon_range, not range - that shadows GDScript's built-in range()
 @export var starting_reserve_ammo: int = 90

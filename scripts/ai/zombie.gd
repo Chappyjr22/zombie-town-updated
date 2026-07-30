@@ -27,6 +27,15 @@ var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 @onready var model: Node3D = $Model
 @onready var anim_player: AnimationPlayer = NodeUtils.find_first_of_type(model, "AnimationPlayer")
 @onready var skeleton: Skeleton3D = NodeUtils.find_first_of_type(model, "Skeleton3D")
+## "Create Physical Skeleton" creates this as a child of Skeleton3D, holding
+## the actual PhysicalBone3D nodes - modern Godot's real owner of
+## physical_bones_start/stop_simulation(). Skeleton3D itself still exposes
+## same-named convenience methods, but calling them silently did nothing in
+## testing (no error, bones just sat inert instead of falling) - calling them
+## on this node directly instead is what actually works.
+@onready var physical_bone_simulator: PhysicalBoneSimulator3D = (
+	NodeUtils.find_first_of_type(model, "PhysicalBoneSimulator3D")
+)
 
 
 func _ready() -> void:
@@ -42,8 +51,8 @@ func _ready() -> void:
 	# exploded on its own the instant the scene loaded, with no death involved.
 	# Isolating them onto the RAGDOLL layer here, not just in die(), fixes that.
 	_isolate_ragdoll_bones()
-	if skeleton:
-		skeleton.physical_bones_stop_simulation()
+	if physical_bone_simulator:
+		physical_bone_simulator.physical_bones_stop_simulation()
 	model.rotation_degrees.y = model_yaw_offset_degrees
 
 
@@ -137,7 +146,8 @@ func die(hit_impulse: Vector3 = Vector3.ZERO) -> void:
 
 	if skeleton:
 		_isolate_ragdoll_bones()
-		skeleton.physical_bones_start_simulation()
+		if physical_bone_simulator:
+			physical_bone_simulator.physical_bones_start_simulation()
 		var bone := _find_impulse_bone(skeleton)
 		if bone and hit_impulse.length() > 0.0:
 			bone.apply_central_impulse(hit_impulse)

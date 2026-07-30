@@ -16,5 +16,5 @@ fire_rate = 7.5
 is_automatic = true
 mag_size = 30
 reload_time = 2.4
-range = 140.0
+weapon_range = 140.0
 starting_reserve_ammo = 120
