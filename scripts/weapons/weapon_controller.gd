@@ -2,14 +2,16 @@ extends Node3D
 class_name WeaponController
 
 ## Where the weapon model's center lands relative to the camera, after scaling.
-## A fixed scale/position guess (no idea how big each FBX's own units actually
-## are) made the first gun fill the entire screen - this now scales each model
-## from its real measured size instead of a hardcoded number, so it's at least
-## a *reasonable* size regardless of how the source file was authored. It may
-## still face/tilt the wrong way (rotation isn't addressed here) since that
-## needs someone looking at it to judge.
 @export var view_model_offset := Vector3(0.25, -0.2, -0.4)
 @export var target_view_model_size := 0.45 ## world-space size of the model's longest dimension after scaling
+## First playtest showed the gun lying on its side (barrel pointing across the
+## screen instead of away from the camera) - the FBX's own forward axis doesn't
+## match Godot's -Z convention. Rather than guess blindly again: select the
+## WeaponController node under Head/Camera3D in player.tscn, find "View Model
+## Rotation Degrees" in the Inspector, and try 90/-90/180 on the Y value (run
+## the scene after each change) until the barrel points forward. Edit it here
+## once you find the right value so it's not lost.
+@export var view_model_rotation_degrees := Vector3(0, 90, 0)
 @export var starting_weapon: WeaponData
 
 var camera: Camera3D
@@ -87,7 +89,15 @@ func _fit_view_model(model: Node3D) -> void:
 
 	var scale_factor := target_view_model_size / largest_dim
 	model.scale = Vector3.ONE * scale_factor
-	model.position = view_model_offset - combined.get_center() * scale_factor
+	model.rotation_degrees = view_model_rotation_degrees
+
+	# Uniform scale commutes with rotation, so this order doesn't matter here -
+	# rotate-then-scale the AABB center to find where it actually lands, then
+	# offset the model so that point sits at view_model_offset.
+	var rotated_center: Vector3 = (
+		Basis.from_euler(view_model_rotation_degrees * (PI / 180.0)) * (combined.get_center() * scale_factor)
+	)
+	model.position = view_model_offset - rotated_center
 
 
 func _process(delta: float) -> void:

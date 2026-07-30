@@ -40,6 +40,8 @@ func _ready() -> void:
 	health = max_health
 	add_to_group("player")
 	_hide_own_body_from_camera()
+	collision_layer = PhysicsLayers.ACTORS
+	collision_mask = PhysicsLayers.WORLD | PhysicsLayers.ACTORS
 
 
 func _hide_own_body_from_camera() -> void:

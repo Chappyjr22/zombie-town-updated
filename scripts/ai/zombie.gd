@@ -25,6 +25,8 @@ var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 func _ready() -> void:
 	health = max_health
 	add_to_group("zombies")
+	collision_layer = PhysicsLayers.ACTORS
+	collision_mask = PhysicsLayers.WORLD | PhysicsLayers.ACTORS
 
 
 func _physics_process(delta: float) -> void:
@@ -117,6 +119,13 @@ func die(hit_impulse: Vector3 = Vector3.ZERO) -> void:
 
 	if skeleton:
 		skeleton.physical_bones_start_simulation()
+		# Ragdoll bones only collide with the world (ground), never the player or
+		# other zombies - otherwise a corpse spawning mid-overlap with an actor's
+		# capsule (common, since zombies die at melee range) gets violently
+		# shoved apart by the physics engine instead of just falling over.
+		for physical_bone in NodeUtils.find_all_of_type(skeleton, "PhysicalBone3D"):
+			physical_bone.collision_layer = PhysicsLayers.RAGDOLL
+			physical_bone.collision_mask = PhysicsLayers.WORLD
 		var bone := _find_impulse_bone(skeleton)
 		if bone and hit_impulse.length() > 0.0:
 			bone.apply_central_impulse(hit_impulse)
