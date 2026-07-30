@@ -1,6 +1,9 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://scripts/player/player.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/models/characters/soldier.glb" id="2"]
+[ext_resource type="Script" path="res://scripts/weapons/weapon_controller.gd" id="3"]
+[ext_resource type="Resource" path="res://resources/weapons/assault_rifle.tres" id="4"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_1"]
 radius = 0.4
@@ -13,8 +16,16 @@ script = ExtResource("1")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("CapsuleShape3D_1")
 
+[node name="Model" parent="." instance=ExtResource("2")]
+
 [node name="Head" type="Node3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.65, 0)
 
 [node name="Camera3D" type="Camera3D" parent="Head"]
 current = true
+
+[node name="WeaponController" type="Node3D" parent="Head/Camera3D"]
+script = ExtResource("3")
+starting_weapon = ExtResource("4")
+
+[node name="AudioStreamPlayer3D" type="AudioStreamPlayer3D" parent="Head/Camera3D/WeaponController"]

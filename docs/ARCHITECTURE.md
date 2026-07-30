@@ -26,7 +26,9 @@ scripts/
   weapons/     Weapon base class, per-weapon behavior, ballistics
   networking/  Listen-server host/join, state sync (see docs/MULTIPLAYER.md)
   ui/          Menu logic, HUD binding
-docs/          This file, plus MULTIPLAYER.md, ASSET_PIPELINE.md, DISTRIBUTION.md
+resources/
+  weapons/     WeaponData .tres instances - one per weapon, data-driven (model/sound/stats), no code per weapon
+docs/          This file, plus MULTIPLAYER.md, ASSET_PIPELINE.md, DISTRIBUTION.md, GAMEPLAY.md
 ```
 
 ## Conventions

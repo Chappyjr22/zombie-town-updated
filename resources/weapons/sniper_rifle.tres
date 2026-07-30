@@ -1,0 +1,20 @@
+[gd_resource type="Resource" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/models/weapons/SniperRifle_1.fbx" id="2"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/fire-sniper-rifle.mp3" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/reload-rifle.mp3" id="4"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Sniper Rifle"
+model_scene = ExtResource("2")
+fire_sound = ExtResource("3")
+reload_sound = ExtResource("4")
+damage = 95.0
+fire_rate = 1.1
+is_automatic = false
+mag_size = 5
+reload_time = 3.0
+range = 300.0
+starting_reserve_ammo = 30

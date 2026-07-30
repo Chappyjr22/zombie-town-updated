@@ -1,0 +1,20 @@
+[gd_resource type="Resource" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/models/weapons/Revolver_1.fbx" id="2"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/fire-revolver.mp3" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/reload-pistol.mp3" id="4"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Revolver"
+model_scene = ExtResource("2")
+fire_sound = ExtResource("3")
+reload_sound = ExtResource("4")
+damage = 45.0
+fire_rate = 2.0
+is_automatic = false
+mag_size = 6
+reload_time = 2.5
+range = 50.0
+starting_reserve_ammo = 36

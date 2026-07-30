@@ -1,0 +1,20 @@
+[gd_resource type="Resource" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/models/weapons/Shotgun_1.fbx" id="2"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/fire-shotgun.mp3" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/reload-shotgun.mp3" id="4"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Shotgun"
+model_scene = ExtResource("2")
+fire_sound = ExtResource("3")
+reload_sound = ExtResource("4")
+damage = 70.0
+fire_rate = 1.2
+is_automatic = false
+mag_size = 6
+reload_time = 3.2
+range = 25.0
+starting_reserve_ammo = 32

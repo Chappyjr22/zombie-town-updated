@@ -1,0 +1,20 @@
+[gd_resource type="Resource" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/models/weapons/Bullpup_1.fbx" id="2"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/fire-assault-rifle.mp3" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/reload-rifle.mp3" id="4"]
+
+[resource]
+script = ExtResource("1")
+display_name = "Bullpup Rifle"
+model_scene = ExtResource("2")
+fire_sound = ExtResource("3")
+reload_sound = ExtResource("4")
+damage = 26.0
+fire_rate = 10.0
+is_automatic = true
+mag_size = 30
+reload_time = 2.0
+range = 130.0
+starting_reserve_ammo = 120
