@@ -8,20 +8,18 @@ Columns: Path · Source · License · Notes (poly count / rig / usage)
 
 | Path | Source | License | Notes |
 |---|---|---|---|
-| `characters/soldier.glb` | [poly.pizza/m/PpLF4rt4ah](https://poly.pizza/m/PpLF4rt4ah) — "Character Soldier" by Quaternius | CC0 | Rigged humanoid, unarmed pose. Candidate for the player model. |
-| `characters/swat.glb` | [poly.pizza/m/Btfn3G5Xv4](https://poly.pizza/m/Btfn3G5Xv4) — "SWAT" by Quaternius | CC0 | Rigged humanoid, tactical outfit. Alt player/teammate model. |
+| `characters/soldier.glb` | [poly.pizza/m/PpLF4rt4ah](https://poly.pizza/m/PpLF4rt4ah) — "Character Soldier" by Quaternius | CC0 | Rigged + animated: `Idle`, `Idle_Shoot`, `Run`, `Run_Gun`, `Jump`, `Jump_Idle`, `Jump_Land`, `Duck`, `Punch`, `HitReact`, `Death`, `Wave`, `Yes`, `No`. Candidate for the player model — has run/shoot poses out of the box. |
+| `characters/swat.glb` | [poly.pizza/m/Btfn3G5Xv4](https://poly.pizza/m/Btfn3G5Xv4) — "SWAT" by Quaternius | CC0 | Rigged + animated: `Idle`, `Idle_Gun`, `Idle_Gun_Pointing`, `Idle_Gun_Shoot`, `Gun_Shoot`, `Run`, `Run_Shoot`, `Run_Left/Right/Back`, `Walk`, `Roll`, `Kick_Left/Right`, `Punch_Left/Right`, `HitRecieve` (x2), `Death`, plus sword/interact/wave extras. Larger animation set than `soldier.glb` — likely the better player-model pick. |
 
-No animations are bundled with these — they're static-pose meshes. See "Still needed" below.
+Both skeletons are named `CharacterArmature` internally but are **not** guaranteed bone-compatible with each other (different node counts — 78 vs 85). Don't assume animations can be swapped between the two without checking in Godot's animation retargeting first.
 
 ## Zombies
 
 | Path | Source | License | Notes |
 |---|---|---|---|
-| `zombies/zombie.glb` | [poly.pizza/m/JoBvxIUpZP](https://poly.pizza/m/JoBvxIUpZP) — "Zombie" by Quaternius | CC0 | Primary zombie model, same low-poly style as the soldier/SWAT models. |
-| `zombies/zombie-alt.glb` | [poly.pizza/m/VlXjG0N8Eg](https://poly.pizza/m/VlXjG0N8Eg) — "Zombie" by Quaternius | CC0 | Alternate pose/variant for visual variety. |
-| `zombies/zombie-crawler.glb` | [poly.pizza/m/Htcsn9OrXJ](https://poly.pizza/m/Htcsn9OrXJ) — "Zombie half" by Quaternius | CC-BY | Legless/crawler variant. **Requires attribution** — credit "Quaternius" — added to README credits. |
-
-No animations bundled. See "Still needed" below.
+| `zombies/zombie.glb` | [poly.pizza/m/JoBvxIUpZP](https://poly.pizza/m/JoBvxIUpZP) — "Zombie" by Quaternius | CC0 | Rigged + animated: `Idle`, `Walk`, `Run`, `Attack`, `Jump`, `HitRecieve`, `Death`. Smaller skeleton (20 nodes) than the player models. |
+| `zombies/zombie-alt.glb` | [poly.pizza/m/VlXjG0N8Eg](https://poly.pizza/m/VlXjG0N8Eg) — "Zombie" by Quaternius | CC0 | Rigged + animated: `Idle`, `Idle_Attack`, `Walk`, `Run`, `Run_Arms`, `Run_Attack`, `Crawl`, `Jump`, `Jump_Idle`, `Jump_Land`, `Punch`, `HitReact`, `Death`, `Wave`, `Yes`, `No`. Richest zombie animation set — good primary zombie. |
+| `zombies/zombie-crawler.glb` | [poly.pizza/m/Htcsn9OrXJ](https://poly.pizza/m/Htcsn9OrXJ) — "Zombie half" by Quaternius | CC-BY | Legless/crawler variant. Rigged + animated: `Idle`, `Walk`, `Run`, `Crawl`, `Jump`, `Jump_Idle`, `Jump_Land`, `HitRecieve`, `Death`. **Requires attribution** — credit "Quaternius" — added to README credits. |
 
 ## Weapons
 
@@ -63,9 +61,9 @@ Static meshes only, no wheel rigging/suspension — fine for background dressing
 
 ## Animations
 
-| Path | Source | License | Notes |
-|---|---|---|---|
-| _(none yet)_ | | | Character/zombie models above are unanimated. Need a walk/run/aim/reload/death animation source — Mixamo (requires an Adobe login this session can't do) or Quaternius's "Universal Animation Library" ([quaternius.itch.io/universal-animation-library-2](https://quaternius.itch.io/universal-animation-library-2), CC0) as a retargetable alternative. |
+No separate animation files — every character/zombie model in `assets/models/characters/` and `assets/models/zombies/` already has its animation clips baked into the same `.glb` (see the tables above for clip names). Godot imports these as an `AnimationPlayer`/`AnimationLibrary` on the model's scene automatically.
+
+If a future character model needs animations it doesn't ship with, Quaternius's CC0 "Universal Animation Library" packs (Unreal-Godot `.glb` variants, retargetable via Godot's bone-mapping) are the fallback — not currently pulled into the repo since it wasn't needed.
 
 ## Textures
 
@@ -74,17 +72,60 @@ Static meshes only, no wheel rigging/suspension — fine for background dressing
 
 ## Audio
 
+### `audio/weapons/`
+
 | Path | Source | License | Notes |
 |---|---|---|---|
-| _(none yet)_ | | | Not sourced yet — gunfire/zombie/footstep/ambience SFX still needed. |
+| `fire-pistol.mp3` | Snake's Authentic Gun Sounds 2 ([f8studios.itch.io/snakes-second-authentic-gun-sounds-pack](https://f8studios.itch.io/snakes-second-authentic-gun-sounds-pack)), "9mm Single" | Free — commercial use OK, no credit required | Real 9mm pistol shot. Pair with `weapons/Pistol_1.fbx`. |
+| `fire-revolver.mp3` | Snake's Authentic Gun Sounds ([f8studios.itch.io/snakes-authentic-gun-sounds](https://f8studios.itch.io/snakes-authentic-gun-sounds)), "22LR Single" | Free — commercial use OK, no credit required | Placeholder for `weapons/Revolver_1.fbx` — a real .38/.357 sound would fit better; swap later if available. |
+| `fire-assault-rifle.mp3` | same pack, "556 Single" | same | 5.56 rifle shot. Pair with `weapons/AssaultRifle_1.fbx` and `weapons/Bullpup_1.fbx`. |
+| `fire-assault-rifle-2.mp3` | same pack, "762x39 Single" | same | AK-pattern round. Pair with `weapons/AssaultRifle2_1.fbx`. |
+| `fire-submachine-gun.mp3` | same pack, "556 Burst" | same | Fast burst, works as SMG auto-fire. Pair with `weapons/SubmachineGun_1.fbx`. |
+| `fire-sniper-rifle.mp3` | same pack, "762x54r Single" | same | Big sniper/DMR-caliber shot. Pair with `weapons/SniperRifle_1.fbx`. |
+| `fire-shotgun.mp3` | Snake's Authentic Gun Sounds 2, "20 Gauge Single" | same | Pair with `weapons/Shotgun_1.fbx` and `weapons/Shotgun_SawedOff.fbx`. |
+| `reload-lmg.mp3`, `reload-pistol.mp3`, `reload-rifle.mp3`, `reload-shell.mp3`, `reload-shotgun.mp3` | Pixabay, via [chappyjr22/zombie-town-online](https://github.com/chappyjr22/zombie-town-online) | [Pixabay Content License](https://pixabay.com/service/license-summary/) | Reload foley, reused from the earlier three.js prototype (same account, license already documented there). |
+| `weapon-handle.mp3`, `weapon-holster.ogg`, `weapon-metal-load.ogg`, `weapon-pistol-reload.ogg`, `weapon-smg-reload.ogg` | Pixabay, via zombie-town-online | Pixabay Content License | Weapon handling foley (draw/holster/mag insert). |
+| `impact-flesh.ogg`, `impact-metal-1.ogg` .. `impact-metal-4.ogg` | CC0 field recordings (Freesound "Punch" + Minetest default asset library), via zombie-town-online | CC0 | Bullet-impact sounds. |
+
+### `audio/zombies/`
+
+| Path | Source | License | Notes |
+|---|---|---|---|
+| `zombie-moan.mp3` | [SoundBible — Zombie Moan](https://soundbible.com/1035-Zombie-Moan.html) by Mike Koenig, via zombie-town-online | CC BY 3.0 | **Requires attribution** — credited in README. |
+| `zombie-attack.mp3` | [SoundBible — Zombie Attack Walk](https://soundbible.com/1030-Zombie-Attack-Walk.html) by Mike Koenig, via zombie-town-online | CC BY 3.0 | **Requires attribution** — credited in README. |
+| `zombie-hurt.mp3` | [SoundBible — Zombie Gets Attacked](https://soundbible.com/1040-Zombie-Gets-Attacked.html) by Mike Koenig, via zombie-town-online | CC BY 3.0 | **Requires attribution** — credited in README. |
+| `zombie-death.mp3` | [SoundBible — Zombie Long Death](https://soundbible.com/1042-Zombie-Long-Death.html) by Mike Koenig, via zombie-town-online | CC BY 3.0 | **Requires attribution** — credited in README. |
+
+### `audio/player/`
+
+| Path | Source | License | Notes |
+|---|---|---|---|
+| `player-hurt-1.mp3`, `player-hurt-2.mp3`, `player-hurt-3.mp3` | Mixkit ("Boxer getting hit," "Fighting man's voice," "Fighting man voice of pain"), via zombie-town-online | [Mixkit Sound Effects Free License](https://mixkit.co/license/) | Player hit-react vocals. |
+| `footstep-1.mp3` .. `footstep-4.mp3` | via zombie-town-online | **Unconfirmed** | Not itemized in the source repo's credits — origin unclear. Fine for this private, non-commercial use; verify/replace before any wider distribution. |
+
+### `audio/environment/`
+
+| Path | Source | License | Notes |
+|---|---|---|---|
+| `ambience-town.ogg` | [Freesound — "Ambience: Night in nature (South of France) - 6"](https://freesound.org/people/SamuelGremaud/sounds/437003/) by SamuelGremaud, via zombie-town-online | CC0 | |
+| `ambience-nuketown.mp3` | Freesound, via zombie-town-online | CC0 | |
+| `ambience-blacksire.ogg` | "Room Ambience" by gchase (preserved in [Coming Out Simulator](https://github.com/ncase/cos)), via zombie-town-online | CC0 | |
+| `fire-crackle.ogg` | [Freesound — "Fire, Campfire, Bonfire"](https://freesound.org/people/yaros_nov/sounds/434026/) by yaros_nov, via zombie-town-online | CC0 | |
+
+### `audio/ui/`
+
+| Path | Source | License | Notes |
+|---|---|---|---|
+| `interact-buy.mp3`, `interact-deny.mp3`, `interact-pickup.mp3` | Kenney (Impact Sounds / RPG Audio / Interface Sounds / Sci-Fi Sounds), via zombie-town-online | CC0 | No attribution required. |
 
 ---
 
 ## Still needed
 
-- **Animations.** None of the character/zombie models above are rigged with usable game animations yet. Next step: pull Quaternius's Universal Animation Library (CC0, retargetable to these models' skeletons) or have Jacob export Mixamo animations manually (walk/run/sprint/aim/fire/reload/death) and drop them in `assets/animations/`.
-- **Audio.** Gunfire, zombie vocals, footsteps, ambience — not sourced yet.
+- **Shotgun reload SFX** could use a more distinct pump-action sound (currently reuses generic `reload-shotgun.mp3`) — Snake's Second Gun Sounds pack has pump/shell-load sounds not yet pulled in.
 - **More weapon variants** if the starter set (one per weapon class) feels too samey.
+- **Textures** beyond what ships baked into the models above (all current models are self-contained).
+- **Footstep source verification** — see note above.
 
 ---
 

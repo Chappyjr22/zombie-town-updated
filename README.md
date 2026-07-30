@@ -39,6 +39,10 @@ docs/       Architecture, multiplayer design, asset pipeline, distribution
 
 ## Credits
 
-Most assets are CC0 (no attribution required) — full sourcing detail in `ASSET_MANIFEST.md`. One asset requires attribution under its CC-BY license:
+Most assets are CC0 (no attribution required) — full sourcing detail in `ASSET_MANIFEST.md`. Assets that require attribution or carry a non-CC0 license:
 
 - `assets/models/zombies/zombie-crawler.glb` — "Zombie half" by [Quaternius](https://poly.pizza/m/Htcsn9OrXJ), licensed CC-BY.
+- `assets/audio/zombies/zombie-moan.mp3`, `zombie-attack.mp3`, `zombie-hurt.mp3`, `zombie-death.mp3` — recordings by Mike Koenig via [SoundBible](https://soundbible.com), licensed CC BY 3.0.
+- `assets/audio/player/player-hurt-1.mp3`, `player-hurt-2.mp3`, `player-hurt-3.mp3` — [Mixkit](https://mixkit.co) fight sound effects, used under the [Mixkit Sound Effects Free License](https://mixkit.co/license/).
+- `assets/audio/weapons/reload-*.mp3`, `weapon-*.mp3`/`.ogg` — [Pixabay](https://pixabay.com) recordings, used under the [Pixabay Content License](https://pixabay.com/service/license-summary/).
+- `assets/audio/weapons/fire-*.mp3` — recorded by F8 Studios ("Snake's Authentic Gun Sounds" packs, [f8studios.itch.io](https://f8studios.itch.io/snakes-authentic-gun-sounds)); free for commercial use, no credit required, but linked here anyway.
