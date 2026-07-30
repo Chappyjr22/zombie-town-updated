@@ -63,7 +63,7 @@ func _fit_view_model(model: Node3D) -> void:
 	for mesh_instance in NodeUtils.find_all_of_type(model, "MeshInstance3D"):
 		if not (mesh_instance is MeshInstance3D) or mesh_instance.mesh == null:
 			continue
-		var local_xform := model.global_transform.affine_inverse() * mesh_instance.global_transform
+		var local_xform: Transform3D = model.global_transform.affine_inverse() * mesh_instance.global_transform
 		var mesh_aabb: AABB = mesh_instance.mesh.get_aabb()
 		for i in range(8):
 			var corner := mesh_aabb.position + Vector3(
