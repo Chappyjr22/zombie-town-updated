@@ -10,6 +10,13 @@ enum State { IDLE, CHASE, ATTACK, DEAD }
 @export var attack_cooldown: float = 1.2
 @export var detection_range: float = 25.0
 @export var corpse_lifetime: float = 20.0 ## seconds a ragdolled corpse stays before queue_free(). Set to 0 to keep forever.
+## Playtest showed zombies chasing with their backs to the player - the model's
+## authored front doesn't match the -Z forward that look_at() (used for facing
+## the player) assumes. 180 is a first guess since it looked like an exact
+## backward mismatch, not an arbitrary angle; if it's still wrong, select the
+## Model node under this zombie in zombie.tscn and adjust its Y rotation in
+## the Inspector directly.
+@export var model_yaw_offset_degrees := 180.0
 
 var health: float
 var state: State = State.IDLE
@@ -37,6 +44,7 @@ func _ready() -> void:
 	_isolate_ragdoll_bones()
 	if skeleton:
 		skeleton.physical_bones_stop_simulation()
+	model.rotation_degrees.y = model_yaw_offset_degrees
 
 
 func _physics_process(delta: float) -> void:
@@ -178,4 +186,12 @@ func _update_animation() -> void:
 		State.IDLE:
 			_play_anim(["Idle"])
 		State.ATTACK:
-			pass # handled by _attack()
+			# _attack() (on cooldown) plays a one-shot swing clip - once that clip
+			# finishes, Godot holds on its last frame since it doesn't loop, which
+			# looked like the zombie freezing mid-animation for the ~1s between
+			# swings. Playing a looping stance here fills that gap. attack_timer
+			# is only ever exactly attack_cooldown on the frame _attack() just
+			# reset it - skip re-triggering an animation that same frame so this
+			# doesn't immediately cut off the swing clip it plays.
+			if attack_timer < attack_cooldown:
+				_play_anim(["Idle_Attack", "Idle"])

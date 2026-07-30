@@ -14,6 +14,7 @@ Depends on: `scripts/weapons` (equips/fires weapons — wired up), `scripts/comm
 - `health` / `take_damage(amount)` / `died` signal, and joins the `"player"` group so `scripts/ai/zombie.gd` can find and target it.
 - **Own body hidden from the local camera.** `_hide_own_body_from_camera()` moves every `MeshInstance3D` under `Model` onto visual layer `BODY_VISUAL_LAYER` (2) and excludes that layer from the local `Camera3D`'s `cull_mask`. The body stays visible to other players (multiplayer isn't wired up yet, but this is layer-based, not a `visible = false`, so it'll still render for anyone else's camera once networking exists) and still casts shadows (shadow rendering isn't controlled by `Camera3D.cull_mask`).
 - **Animation driven by movement state.** `_update_animation()` picks a clip based on `is_on_floor()` / landing-this-frame / crouching / horizontal speed: `Jump_Idle`/`Jump` while airborne, `Jump_Land` on landing, `Duck` while crouched, `Run_Gun`/`Run` while moving, `Idle_Shoot`/`Idle` otherwise (soldier.glb's actual clip names — see `ASSET_MANIFEST.md`).
+- **`model_yaw_offset_degrees` (default 180)** rotates the `Model` node's local Y to correct for the same authored-front-axis mismatch found on the zombie models (see `scripts/ai/CLAUDE.md`) — applied pre-emptively here since it's the same Quaternius asset family, even though this session never actually saw the player's own body (it's hidden from the local camera). Matters for other players' views once multiplayer exists, or a future third-person mode.
 
 ## Known gaps
 

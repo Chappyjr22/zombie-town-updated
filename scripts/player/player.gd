@@ -18,6 +18,12 @@ const CROUCH_LERP_SPEED := 10.0
 const BODY_VISUAL_LAYER := 2
 
 @export var max_health: float = 100.0
+## Same Quaternius model family as the zombies, which needed a 180 correction
+## for look_at()-driven facing to line up with the model's authored front -
+## applying the same fix here pre-emptively, even though this session never
+## saw the player's own body (it's hidden from the local camera). Matters once
+## other players can see it, or for third-person views later.
+@export var model_yaw_offset_degrees := 180.0
 
 @onready var head: Node3D = $Head
 @onready var collision_shape: CollisionShape3D = $CollisionShape3D
@@ -42,6 +48,7 @@ func _ready() -> void:
 	_hide_own_body_from_camera()
 	collision_layer = PhysicsLayers.ACTORS
 	collision_mask = PhysicsLayers.WORLD | PhysicsLayers.ACTORS
+	model.rotation_degrees.y = model_yaw_offset_degrees
 
 
 func _hide_own_body_from_camera() -> void:
