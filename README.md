@@ -36,3 +36,9 @@ docs/       Architecture, multiplayer design, asset pipeline, distribution
 - `docs/ASSET_PIPELINE.md` — where assets come from, licensing, import settings
 - `docs/DISTRIBUTION.md` — build/export/itch.io release process
 - `ASSET_MANIFEST.md` — index of every asset in the project
+
+## Credits
+
+Most assets are CC0 (no attribution required) — full sourcing detail in `ASSET_MANIFEST.md`. One asset requires attribution under its CC-BY license:
+
+- `assets/models/zombies/zombie-crawler.glb` — "Zombie half" by [Quaternius](https://poly.pizza/m/Htcsn9OrXJ), licensed CC-BY.
