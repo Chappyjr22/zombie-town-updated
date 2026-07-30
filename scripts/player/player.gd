@@ -11,15 +11,35 @@ const STAND_HEIGHT := 1.8
 const CROUCH_HEIGHT := 1.1
 const CROUCH_LERP_SPEED := 10.0
 
+@export var max_health: float = 100.0
+
 @onready var head: Node3D = $Head
 @onready var collision_shape: CollisionShape3D = $CollisionShape3D
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var is_crouching := false
+var health: float
+var is_dead := false
+
+signal health_changed(current: float, max: float)
+signal died
 
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	health = max_health
+	add_to_group("player")
+
+
+func take_damage(amount: float) -> void:
+	if is_dead:
+		return
+	health -= amount
+	health_changed.emit(health, max_health)
+	if health <= 0.0:
+		is_dead = true
+		died.emit()
+		# TODO: no death/respawn flow yet - player just stops taking further damage.
 
 
 func _unhandled_input(event: InputEvent) -> void:

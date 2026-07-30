@@ -4,10 +4,10 @@
 
 Build and get fun before adding meta-progression:
 
-1. First-person movement + camera
-2. Weapon equip/fire/reload, hooked to the models and sounds already in `assets/`
-3. Zombie AI: chase, attack, die (with ragdoll — see below)
-4. Basic round-based waves (zombies spawn in increasing numbers/difficulty per round)
+1. ~~First-person movement + camera~~ — done (`scripts/player/player.gd`)
+2. ~~Weapon equip/fire/reload, hooked to the models and sounds already in `assets/`~~ — done (`scripts/weapons/`)
+3. ~~Zombie AI: chase, attack, die (with ragdoll — see below)~~ — done (`scripts/ai/zombie.gd`), except the ragdoll needs one manual in-editor step, see `scripts/ai/CLAUDE.md`
+4. Basic round-based waves (zombies spawn in increasing numbers/difficulty per round) — not started; `test_arena.tscn` currently just hand-places 3 zombies
 
 ## Deferred (not in scope yet)
 
@@ -31,4 +31,4 @@ The old three.js prototype implemented ragdolls from scratch: a hand-rolled 15-p
 - Godot's physics engine takes it from there — no custom simulation code needed. (Jolt Physics is available as of 4.3 and became the default in 4.4; either it or the built-in GodotPhysics3D handles PhysicalBone3D ragdolls fine.)
 - `physical_bones_stop_simulation()` + blending back to animation is NOT needed for zombies (they stay dead), unlike a game that revives ragdolled characters.
 
-Implementation lives in `scripts/ai/` once the zombie scene exists.
+Implementation is in `scripts/ai/zombie.gd`. **The `PhysicalBone3D` setup itself is a one-time manual step in the Godot editor** (Skeleton3D → "Create Physical Skeleton") that this session couldn't perform without editor access — full instructions in `scripts/ai/CLAUDE.md`. The death/ragdoll-trigger code is already written and safe to run either way (it's a no-op until that step is done, not an error).
