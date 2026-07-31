@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/weapons/cc0/m4a1.glb" id="1_27ynf"]
+
+[node name="M4a1" type="Node3D" unique_id=1342636926]
+
+[node name="Root Scene" type="Node3D" parent="." unique_id=1853030122 instance=ExtResource("1_27ynf")]
+
+[node name="Grip" type="Marker3D" parent="." unique_id=310709471]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.06420687, 0.020761833)
+
+[node name="Foregrip" type="Marker3D" parent="." unique_id=604547300]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.025706869, -0.08673443)

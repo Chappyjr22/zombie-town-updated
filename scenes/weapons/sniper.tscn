@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/weapons/cc0/sniper.glb" id="1_hn2em"]
+
+[node name="Sniper" type="Node3D" unique_id=335216636]
+
+[node name="Root Scene" type="Node3D" parent="." unique_id=2097794903 instance=ExtResource("1_hn2em")]
+
+[node name="Grip" type="Marker3D" parent="." unique_id=1600138189]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.012861012, -0.055, 0.01911131)
+
+[node name="Foregrip" type="Marker3D" parent="." unique_id=432572460]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.012861012, -0.0165, -0.29621604)

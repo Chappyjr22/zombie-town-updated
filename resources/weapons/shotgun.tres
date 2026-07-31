@@ -1,7 +1,7 @@
 [gd_resource type="Resource" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
-[ext_resource type="PackedScene" path="res://assets/models/weapons/Shotgun_1.fbx" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/shotgun.tscn" id="2"]
 [ext_resource type="AudioStream" path="res://assets/audio/weapons/fire-shotgun.mp3" id="3"]
 [ext_resource type="AudioStream" path="res://assets/audio/weapons/reload-shotgun.mp3" id="4"]
 

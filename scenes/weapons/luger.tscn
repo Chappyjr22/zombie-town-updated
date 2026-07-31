@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/weapons/cc0/luger.glb" id="1_u38h7"]
+
+[node name="Luger" type="Node3D" unique_id=732495472]
+
+[node name="Root Scene" type="Node3D" parent="." unique_id=2061047260 instance=ExtResource("1_u38h7")]
+
+[node name="Grip" type="Marker3D" parent="." unique_id=1191116419]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.002421232, -0.055028975, 0.031329453)
+
+[node name="Foregrip" type="Marker3D" parent="." unique_id=1940369767]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.002421232, -0.016528975, -0.037430942)

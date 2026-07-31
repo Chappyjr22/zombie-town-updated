@@ -26,10 +26,6 @@ const SUPPORT_FOREARM_BONE := &"mixamorig_LeftForeArm"
 ## measured from the body's own pose rather than authored - see _align_world_model.
 @export var world_model_position := Vector3(0.0, 0.02, 0.0)
 @export var world_model_rotation_degrees := Vector3.ZERO
-## How the support hand is turned relative to the weapon once IK has put it on the
-## handguard. Per-rig rather than derivable: which way a Mixamo wrist bone calls
-## "palm down" is a property of how the rig was authored.
-@export var support_hand_rotation_degrees := Vector3.ZERO
 
 @export_group("Aim down sights")
 @export_range(20.0, 90.0, 1.0) var ads_fov := 55.0
@@ -171,13 +167,54 @@ func _align_world_model() -> void:
 	world_model_aligned = true
 
 
+## Seats the weapon in the hand using the `Grip` and `Foregrip` markers on its
+## scene, if it has them.
+##
+## Two markers give both the position and the direction: the grip goes where the
+## trigger hand closes, and the line from grip to foregrip *is* the barrel. That
+## replaces guessing at both from the silhouette, which is what the fallback below
+## does and what kept putting the hand on the magazine instead of the rail.
+##
+## Markers are placed in the weapon's own .tscn, so they're dragged into position
+## in the editor against the actual model rather than derived from numbers.
+func _fit_from_sockets(model: Node3D) -> bool:
+	var grip := model.get_node_or_null("Grip") as Node3D
+	var foregrip := model.get_node_or_null("Foregrip") as Node3D
+	if grip == null or foregrip == null:
+		return false
+	var along_barrel := foregrip.position - grip.position
+	if along_barrel.length_squared() < 0.000001:
+		push_warning("%s has its Grip and Foregrip markers in the same place." % model.name)
+		return false
+
+	# Turn the weapon so the grip-to-foregrip line runs down -Z, then slide it so
+	# the grip marker lands on the origin - which is the hand.
+	var fit_basis := (
+		Basis.from_euler(current_weapon.grip_rotation_degrees * (PI / 180.0))
+		* Basis.looking_at(along_barrel.normalized(), Vector3.UP).inverse()
+	)
+	model.transform = Transform3D(
+		fit_basis,
+		current_weapon.grip_position - fit_basis * grip.position
+	)
+
+	foregrip_in_mesh = foregrip.position
+	sight_in_mesh = grip.position + along_barrel * 0.5 + Vector3.UP * 0.04
+	barrel_in_mesh = along_barrel.normalized()
+	# These models are authored at real-world scale, so nothing is resized.
+	return true
+
+
 ## Scales the weapon so its longest dimension matches weapon_length, turns it to
 ## point down -Z, and slides it so grip_anchor - its pistol grip - sits on the
 ## origin, which is where the hand closes.
 ##
-## Everything is derived from the model's own bounding box, so the arbitrary pivot
-## placement and units in the source FBXs don't matter.
+## The fallback for weapons with no sockets: everything is inferred from the
+## model's own bounding box. Workable, but it can only guess where a grip is from
+## the shape of the underside, so prefer markers.
 func _fit_to_grip(model: Node3D) -> void:
+	if _fit_from_sockets(model):
+		return
 	var bounds := _measure_local_bounds(model)
 	if bounds.size == Vector3.ZERO:
 		return
@@ -334,18 +371,15 @@ func _solve_support_arm_ik() -> void:
 	)
 	skeleton.force_update_all_bone_transforms()
 
-	# The solve above only moves the wrist onto the socket - it never turns the
-	# hand, so the palm keeps facing wherever the clip left it, which was authored
-	# around Mixamo's own rifle. That reads as a hand floating alongside the weapon
-	# rather than holding it. Locking the hand's orientation to the weapon's is
-	# what makes it a grip; the offset is per-rig, since which way a wrist bone
-	# considers "palm down" is Mixamo's business, not something derivable.
-	_set_bone_global_basis(
-		support_hand_index,
-		into_skeleton.basis * world_model.global_transform.basis.orthonormalized()
-		* Basis.from_euler(support_hand_rotation_degrees * (PI / 180.0))
-	)
-	skeleton.force_update_all_bone_transforms()
+	# Position only - the hand's own rotation is left to the clip, which already
+	# poses it gripping a rifle handguard.
+	#
+	# Forcing the hand's basis to match the weapon's was tried and made it worse:
+	# Mixamo hand bones run +Y down the fingers, so aligning the hand to the
+	# weapon points the fingers straight up and drapes the hand over the top of
+	# the barrel instead of wrapping it. If the palm ever does need turning, the
+	# correction has to map hand-+Y onto the barrel (about -90 degrees on X),
+	# not onto the weapon's up axis.
 
 
 ## Bone poses are local to the parent, so a rotation worked out in skeleton space

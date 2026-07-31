@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/weapons/cc0/suomi-kp.glb" id="1_oksq3"]
+
+[node name="SuomiKp" type="Node3D" unique_id=2192956]
+
+[node name="Root Scene" type="Node3D" parent="." unique_id=1273701457 instance=ExtResource("1_oksq3")]
+
+[node name="Grip" type="Marker3D" parent="." unique_id=1256634660]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.055, 0.018959211)
+
+[node name="Foregrip" type="Marker3D" parent="." unique_id=578017281]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.0165, -0.21125941)

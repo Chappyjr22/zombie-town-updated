@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/weapons/cc0/flare-gun.glb" id="1_jtvxd"]
+
+[node name="FlareGun" type="Node3D" unique_id=1471004346]
+
+[node name="Root Scene" type="Node3D" parent="." unique_id=86627638 instance=ExtResource("1_jtvxd")]
+
+[node name="Grip" type="Marker3D" parent="." unique_id=384453526]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0035581905, -0.052778684, 0.015669832)
+
+[node name="Foregrip" type="Marker3D" parent="." unique_id=494279860]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.0035581905, -0.014278684, -0.043854494)

@@ -1,0 +1,13 @@
+[gd_scene format=3]
+
+[ext_resource type="PackedScene" path="res://assets/models/weapons/cc0/ak47.glb" id="1_qiwwx"]
+
+[node name="Ak47" type="Node3D" unique_id=1075034029]
+
+[node name="Root Scene" type="Node3D" parent="." unique_id=2066108550 instance=ExtResource("1_qiwwx")]
+
+[node name="Grip" type="Marker3D" parent="." unique_id=103210154]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0028077066, -0.06204347, -0.02141885)
+
+[node name="Foregrip" type="Marker3D" parent="." unique_id=692209007]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0028077066, -0.02354347, 0.24059758)
