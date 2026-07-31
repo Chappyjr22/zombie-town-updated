@@ -24,3 +24,6 @@ Thumbs.db
 
 # Debug renders written by tools/render_*.gd for eyeballing the viewmodel.
 /previews/
+
+# Personal Claude Code settings (contains a blanket permission grant - never share)
+.claude/settings.local.json

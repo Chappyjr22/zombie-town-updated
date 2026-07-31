@@ -12,6 +12,16 @@ class_name WeaponData
 @export var reload_time: float = 2.0
 @export var weapon_range: float = 120.0 ## named weapon_range, not range - that shadows GDScript's built-in range()
 @export var starting_reserve_ammo: int = 90
+## Which body locomotion set the character carries this weapon with - see
+## LocomotionSets. A rifle is held in two hands across the chest and a handgun in
+## one at the waist, so the whole run/strafe set differs, not just the arms.
+## Names that aren't a known set fall back to the rifle one.
+@export var locomotion_set: StringName = &"rifle"
+
+## Whether the character's off hand is pulled onto the weapon's foregrip. False
+## for a handgun: the pistol locomotion clips carry it in one hand and swing the
+## other arm, and forcing that hand onto the grip fights the animation.
+@export var uses_support_hand: bool = true
 
 @export_group("Weapon fitting")
 ## Longest dimension of the weapon in metres once fitted - its real-world length,

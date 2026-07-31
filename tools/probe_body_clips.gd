@@ -17,13 +17,10 @@ extends SceneTree
 ## A clip needs both to be usable for a shooter. High hands with low forward is a
 ## patrol carry; low hands is arms-down and wrong however it's pointed.
 
+## This scores the clips baked into the model itself. For the clips the game
+## actually plays - the locomotion packs, grouped by which direction each one
+## covers - use tools/probe_locomotion_sets.gd instead.
 const MODEL_PATH := "res://assets/models/characters/mixamo_soldier.glb"
-const EXTRA_CLIPS := {
-	"idle (installed)": "res://assets/animations/rifle_aim_idle.res",
-	"sprint (installed)": "res://assets/animations/rifle_sprint.res",
-	"strafe_left (installed)": "res://assets/animations/rifle_strafe_left.res",
-	"strafe_right (installed)": "res://assets/animations/rifle_strafe_right.res",
-}
 const SAMPLES := 8
 
 
@@ -36,13 +33,6 @@ func _run() -> void:
 	root.add_child(model)
 	var skeleton := _find_first(model, "Skeleton3D") as Skeleton3D
 	var animation_player := _find_first(model, "AnimationPlayer") as AnimationPlayer
-
-	# Installed clips are added under a distinct name so the stock ones they
-	# replace can be compared against them in the same run.
-	var library := animation_player.get_animation_library(&"")
-	for label in EXTRA_CLIPS:
-		if ResourceLoader.exists(EXTRA_CLIPS[label]):
-			library.add_animation(label, load(EXTRA_CLIPS[label]))
 
 	print("clip                    hands above hips   forward")
 	for clip_name in animation_player.get_animation_list():

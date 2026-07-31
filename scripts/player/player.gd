@@ -1,4 +1,5 @@
 extends CharacterBody3D
+class_name Player
 
 const WALK_SPEED := 4.5
 const SPRINT_SPEED := 7.5
@@ -13,43 +14,23 @@ const LOCOMOTION_BLEND_SPEED := 10.0
 const STANCE_BLEND_SPEED := 8.0
 
 ## Clips loaded over the soldier model's own at runtime, as loose Animation
-## resources so the model itself is never rewritten. From Mixamo's Rifle 8-Way
-## Locomotion Pack; see tools/build_clips.gd.
+## resources so the model itself is never rewritten. From Mixamo's Rifle 8-Way and
+## Pistol/Handgun Locomotion Packs; see tools/build_clips.gd and LocomotionSets.
 ##
 ## The model's stock locomotion is mostly empty-handed - measured, its strafes
 ## carry the hands 0.04m above the hips against 0.43m for a weapon held ready, so
-## stepping sideways dropped the rifle to the character's waist. The pack is
-## rifle-held throughout and covers all eight directions per speed, which also
-## retires two workarounds: a sprint clip that had to be sourced separately
-## because the model shipped none, and a strafe that had to be mirrored because
-## Mixamo only sold one side.
-const RIFLE_CLIP_DIR := "res://assets/animations/rifle"
-
-## Speed tiers, slowest first, each with a full eight-way set.
-const LOCOMOTION_TIERS: Array[StringName] = [&"walk", &"run", &"sprint", &"walk_crouching"]
-
-## Direction suffix to its place on the blend square: X strafes, -Y is forward.
-## Diagonals sit on the unit circle rather than the corners so that holding two
-## keys moves the blend the same distance from centre as holding one.
-const LOCOMOTION_DIRECTIONS := {
-	&"forward": Vector2(0.0, -1.0),
-	&"forward_left": Vector2(-0.707, -0.707),
-	&"forward_right": Vector2(0.707, -0.707),
-	&"left": Vector2(-1.0, 0.0),
-	&"right": Vector2(1.0, 0.0),
-	&"backward": Vector2(0.0, 1.0),
-	&"backward_left": Vector2(-0.707, 0.707),
-	&"backward_right": Vector2(0.707, 0.707),
-}
-
-## Standing and crouching centres of the blend squares, plus the airborne set.
-const SINGLE_CLIPS: Array[StringName] = [
-	&"idle_aiming",
-	&"idle_crouching_aiming",
-	&"jump_up",
-	&"jump_loop",
-	&"jump_down",
-]
+## stepping sideways dropped the rifle to the character's waist. The packs are
+## weapon-held throughout, which also retires two workarounds: a sprint clip that
+## had to be sourced separately because the model shipped none, and a strafe that
+## had to be mirrored because Mixamo only sold one side.
+##
+## Every set is installed at startup and the blend tree is re-pointed when the
+## weapon changes, rather than loading clips mid-game - a switch is a keypress and
+## should not touch the disk.
+const INSTALLED_SETS: Array[StringName] = [&"rifle", &"pistol"]
+## Used until a weapon says otherwise, and the fallback if another set turns out
+## to be missing clips.
+const DEFAULT_SET := &"rifle"
 
 ## Spine bones the look pitch is spread across, lowest first. Sharing it over
 ## three joints curves the torso the way a person actually leans, where putting it
@@ -70,6 +51,13 @@ const MAX_AIM_YAW := deg_to_rad(40.0)
 ## a third-person camera to vertical puts it inside the floor or directly overhead.
 const CAMERA_PITCH_MIN := deg_to_rad(-65.0)
 const CAMERA_PITCH_MAX := deg_to_rad(40.0)
+
+## Health comes back on its own after a lull, so a bad round isn't a run-ending
+## injury - the pressure comes from being swarmed, not from chip damage you can
+## never undo. Ported from the browser build: 5.5s clear of damage, then 10% of
+## max per second.
+const REGEN_DELAY := 5.5
+const REGEN_FRACTION_PER_SECOND := 0.10
 
 @export var max_health: float = 100.0
 ## Mixamo authors this character facing +Z while Godot gameplay forward is -Z, so
@@ -99,6 +87,10 @@ var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var is_crouching := false
 var health: float
 var is_dead := false
+## Spendable currency, earned by hitting and killing zombies. The buy systems -
+## wall weapons, the mystery box, map gates - all price against this.
+var points := 0
+var time_since_damaged := 0.0
 var was_on_floor := true
 var active_full_body_animation: StringName = &""
 var airborne_animation: StringName = &""
@@ -111,8 +103,22 @@ var fire_animation_node: AnimationNodeAnimation
 var locomotion_blend := Vector2.ZERO
 var sprint_blend := 0.0
 var stance_blend := 0.0
+## Locomotion set the body is currently carrying its weapon with.
+var current_set: StringName = DEFAULT_SET
+## Whether that set has sprint clips of its own. When it doesn't, sprinting stays
+## on the normal tier and the stride is sped up to match instead.
+var set_has_sprint := true
+## Every blend point in the three blend squares, as `{node, tier, key}`, so a
+## weapon switch re-points them at another set's clips. `tier` is empty for the
+## squares' centre idles, whose key indexes the set definition directly.
+var blend_points: Array[Dictionary] = []
+## Set while the landing clip plays, so locomotion doesn't cut it off. A flag
+## rather than a test against the clip's name, because a set may use one clip for
+## more than one thing - the pistol pack has a single jump.
+var is_playing_landing := false
 
 signal health_changed(current: float, max: float)
+signal points_changed(total: int, delta: int)
 signal died
 
 
@@ -142,6 +148,12 @@ func _ready() -> void:
 	if weapon_controller:
 		weapon_controller.fired.connect(_on_weapon_fired)
 		weapon_controller.reload_started.connect(_on_reload_started)
+		weapon_controller.weapon_changed.connect(_on_weapon_changed)
+		weapon_controller.hit_confirmed.connect(_on_hit_confirmed)
+		# The starting weapon is equipped in WeaponController._ready(), which runs
+		# before this - children are readied first - so that first weapon_changed
+		# was already missed and the stance has to be caught up on by hand.
+		_on_weapon_changed(weapon_controller.current_weapon, weapon_controller.current_slot)
 		# Unconditional: without it the body holds nothing, so other players would
 		# see an unarmed soldier miming a rifle once multiplayer exists.
 		weapon_controller.attach_world_model(body_skeleton, &"mixamorig_RightHand")
@@ -156,6 +168,20 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_apply_spine_aim()
 	_update_camera_distance(delta)
+	_update_regen(delta)
+
+
+## Heals back to full once the player has been out of trouble long enough. The
+## delay is the whole mechanic - it rewards breaking contact, which is what makes
+## kiting a round the right way to play it.
+func _update_regen(delta: float) -> void:
+	if is_dead or health >= max_health:
+		return
+	time_since_damaged += delta
+	if time_since_damaged < REGEN_DELAY:
+		return
+	health = minf(max_health, health + max_health * REGEN_FRACTION_PER_SECOND * delta)
+	health_changed.emit(health, max_health)
 
 
 ## Pulls the camera in over the shoulder while aiming and lets it back out again.
@@ -243,42 +269,60 @@ func _measure_aim_yaw_error() -> float:
 	return barrel.normalized().signed_angle_to(view.normalized(), Vector3.UP)
 
 
-## Installs the clips the soldier model doesn't ship with, or ships wrong. Any
-## that are missing are skipped rather than fatal - the model's own clips still
-## work, they just read worse.
-## Loads the rifle pack over the model's own clips.
+## Loads every locomotion set's clips over the soldier model's own.
 ##
-## Names are built from the tier and direction lists rather than read off disk:
-## exported builds turn loose `.res` files into `.remap`, so a directory scan
-## works in the editor and quietly finds nothing in a shipped game.
+## Which files to load comes from LocomotionSets rather than from a directory
+## scan: exported builds turn loose `.res` files into `.remap`, so scanning works
+## in the editor and quietly finds nothing in a shipped game.
+##
+## Clips are installed under set-namespaced names because the packs collide - both
+## contain an "idle" - and because holding both in the library at once is what
+## makes a weapon switch a matter of re-pointing the tree.
+##
+## Missing clips are skipped rather than fatal: the model's own animations still
+## play, they just read worse than the pack's.
 func _install_extra_clips() -> void:
 	var library := anim_player.get_animation_library(&"")
-	var wanted: Array[StringName] = SINGLE_CLIPS.duplicate()
-	for tier in LOCOMOTION_TIERS:
-		for direction in LOCOMOTION_DIRECTIONS:
-			wanted.append(StringName("%s_%s" % [tier, direction]))
+	for set_name in INSTALLED_SETS:
+		var paths := LocomotionSets.clip_paths(set_name)
+		var missing := 0
+		for clip_name in paths:
+			if not ResourceLoader.exists(paths[clip_name]):
+				missing += 1
+				continue
+			if library.has_animation(clip_name):
+				library.remove_animation(clip_name)
+			library.add_animation(clip_name, load(paths[clip_name]))
+		if missing > 0:
+			push_warning(
+				(
+					"%d of the %d '%s' locomotion clips are missing; run"
+					+ " `godot --headless --path . --script tools/build_clips.gd -- %s`."
+				) % [missing, paths.size(), set_name, set_name]
+			)
 
-	var missing := 0
-	for clip_name in wanted:
-		var path := RIFLE_CLIP_DIR.path_join("%s.res" % clip_name)
-		if not ResourceLoader.exists(path):
-			missing += 1
-			continue
-		var existing := _find_animation([clip_name])
-		if existing != &"":
-			library.remove_animation(existing)
-		library.add_animation(clip_name, load(path))
-	if missing > 0:
-		push_warning(
-			"%d rifle clips are missing from %s; run tools/build_clips.gd."
-			% [missing, RIFLE_CLIP_DIR]
-		)
+
+## Turns a confirmed hit into points. The award scales with the round, so the
+## rate the economy pays keeps up with what zombies cost to kill - see
+## RoundDirector.points_for_hit.
+func _on_hit_confirmed(part: StringName, killed: bool) -> void:
+	var director := get_tree().get_first_node_in_group("round_director") as RoundDirector
+	var round_number: int = director.current_round if director else 1
+	award_points(RoundDirector.points_for_hit(round_number, part, killed))
+
+
+func award_points(amount: int) -> void:
+	if amount == 0:
+		return
+	points += amount
+	points_changed.emit(points, amount)
 
 
 func take_damage(amount: float) -> void:
 	if is_dead:
 		return
 	health -= amount
+	time_since_damaged = 0.0
 	health_changed.emit(health, max_health)
 	if health <= 0.0:
 		is_dead = true
@@ -384,25 +428,35 @@ func _update_animation(
 ) -> void:
 	if anim_player == null:
 		return
-	if active_full_body_animation in [
-		_find_animation([&"death"]),
-		_find_animation([&"jump_down"]),
-	]:
+	# Death holds the body, and the landing clip is allowed to finish before
+	# locomotion takes back over.
+	if is_dead or is_playing_landing:
 		return
 	if not is_on_floor():
-		var desired_air_animation := &"jump_up" if velocity.y > 0.0 else &"jump_loop"
+		# Tracked by key rather than by clip name, because a set may use one clip
+		# for more than one of these - the pistol pack has a single jump.
+		var desired_air_animation: StringName = (
+			&"jump_up" if velocity.y > 0.0 else &"jump_loop"
+		)
 		if desired_air_animation != airborne_animation:
 			airborne_animation = desired_air_animation
-			_play_full_body_animation([desired_air_animation])
+			_play_full_body_animation([_set_clip(desired_air_animation)], 1.0, true)
 		return
 	if just_landed:
 		airborne_animation = &""
-		_play_full_body_animation([&"jump_down"])
+		is_playing_landing = true
+		_play_full_body_animation([_set_clip(&"jump_down")], 1.0, true)
 		return
 	if active_full_body_animation != &"":
 		return
 	_set_animation_tree_active(true)
 	_update_locomotion_blend(delta, input_dir, is_sprinting)
+
+
+## The installed name of one of the current set's clips - `idle`, `crouch_idle`,
+## `jump_up`, `jump_loop` or `jump_down`.
+func _set_clip(key: StringName) -> StringName:
+	return LocomotionSets.installed_name(current_set, LocomotionSets.get_set(current_set)[key])
 
 
 func _find_animation(names: Array) -> StringName:
@@ -423,14 +477,12 @@ func _configure_animation_loops() -> void:
 		var loop_animation := _find_animation([requested_name])
 		if loop_animation != &"":
 			anim_player.get_animation(loop_animation).loop_mode = Animation.LOOP_LINEAR
-	for requested_name in [
-		&"jump_up",
-		&"jump_down",
-		&"fire",
-		&"fire_move",
-		&"reload",
-		&"death",
-	]:
+	var one_shots: Array[StringName] = [&"fire", &"fire_move", &"reload", &"death"]
+	for set_name in INSTALLED_SETS:
+		var definition := LocomotionSets.get_set(set_name)
+		one_shots.append(LocomotionSets.installed_name(set_name, definition.jump_up))
+		one_shots.append(LocomotionSets.installed_name(set_name, definition.jump_down))
+	for requested_name in one_shots:
 		var one_shot_animation := _find_animation([requested_name])
 		if one_shot_animation != &"":
 			anim_player.get_animation(one_shot_animation).loop_mode = Animation.LOOP_NONE
@@ -442,21 +494,18 @@ func _setup_animation_tree() -> void:
 		return
 
 	animation_blend_tree = AnimationNodeBlendTree.new()
-	# Moving normally is a jog, not a walk - "run" is the jog, and "sprint" is the
-	# clip installed over the top by _install_extra_clips. The model ships no
-	# sprint of its own, which is why holding shift used to look identical to
-	# moving normally.
-	# Moving normally is a jog, so the "run" tier is the default gait and "sprint"
-	# is what holding shift blends toward. The pack's "walk" tier is slower than
-	# anything the player currently moves at and is left unused for now.
-	var walk_space := _create_directional_blend_space(&"run", &"idle_aiming")
-	var run_space := _create_directional_blend_space(&"sprint", &"idle_aiming")
-	var crouch_space := _create_directional_blend_space(
-		&"walk_crouching",
-		&"idle_crouching_aiming"
-	)
-	var run_blend := AnimationNodeBlend2.new()
+	# Three squares, one per speed tier. Moving normally is a jog rather than a
+	# walk, so "normal" is the default gait and "sprint" is what holding shift
+	# blends toward.
+	var normal_space := _create_directional_blend_space(&"normal", &"idle")
+	var sprint_space := _create_directional_blend_space(&"sprint", &"idle")
+	var crouch_space := _create_directional_blend_space(&"crouch", &"crouch_idle")
+	var sprint_blend_node := AnimationNodeBlend2.new()
 	var stance_node := AnimationNodeBlend2.new()
+	# Speeds the whole locomotion stack up when the set has no sprint of its own,
+	# so the character's stride matches the ground they're covering rather than
+	# skating along at jog cadence. Left at 1.0 the rest of the time.
+	var locomotion_speed := AnimationNodeTimeScale.new()
 	fire_animation_node = _create_animation_node(&"fire")
 	var fire_shot := AnimationNodeOneShot.new()
 	fire_shot.fadein_time = 0.06
@@ -469,27 +518,32 @@ func _setup_animation_tree() -> void:
 	reload_shot.fadeout_time = 0.2
 	_configure_upper_body_filter(reload_shot, &"reload")
 
-	animation_blend_tree.add_node(&"WalkSpace", walk_space)
-	animation_blend_tree.add_node(&"RunSpace", run_space)
-	animation_blend_tree.add_node(&"RunBlend", run_blend)
+	animation_blend_tree.add_node(&"NormalSpace", normal_space)
+	animation_blend_tree.add_node(&"SprintSpace", sprint_space)
+	animation_blend_tree.add_node(&"SprintBlend", sprint_blend_node)
 	animation_blend_tree.add_node(&"CrouchSpace", crouch_space)
 	animation_blend_tree.add_node(&"StanceBlend", stance_node)
+	animation_blend_tree.add_node(&"LocomotionSpeed", locomotion_speed)
 	animation_blend_tree.add_node(&"FireAnimation", fire_animation_node)
 	animation_blend_tree.add_node(&"FireShot", fire_shot)
 	animation_blend_tree.add_node(&"ReloadAnimation", reload_animation_node)
 	animation_blend_tree.add_node(&"ReloadSpeed", reload_speed)
 	animation_blend_tree.add_node(&"ReloadShot", reload_shot)
 
-	animation_blend_tree.connect_node(&"RunBlend", 0, &"WalkSpace")
-	animation_blend_tree.connect_node(&"RunBlend", 1, &"RunSpace")
-	animation_blend_tree.connect_node(&"StanceBlend", 0, &"RunBlend")
+	animation_blend_tree.connect_node(&"SprintBlend", 0, &"NormalSpace")
+	animation_blend_tree.connect_node(&"SprintBlend", 1, &"SprintSpace")
+	animation_blend_tree.connect_node(&"StanceBlend", 0, &"SprintBlend")
 	animation_blend_tree.connect_node(&"StanceBlend", 1, &"CrouchSpace")
-	animation_blend_tree.connect_node(&"FireShot", 0, &"StanceBlend")
+	animation_blend_tree.connect_node(&"LocomotionSpeed", 0, &"StanceBlend")
+	animation_blend_tree.connect_node(&"FireShot", 0, &"LocomotionSpeed")
 	animation_blend_tree.connect_node(&"FireShot", 1, &"FireAnimation")
 	animation_blend_tree.connect_node(&"ReloadSpeed", 0, &"ReloadAnimation")
 	animation_blend_tree.connect_node(&"ReloadShot", 0, &"FireShot")
 	animation_blend_tree.connect_node(&"ReloadShot", 1, &"ReloadSpeed")
 	animation_blend_tree.connect_node(&"output", 0, &"ReloadShot")
+
+	# The blend points were created empty; this is what fills their clip names in.
+	_apply_locomotion_set(current_set)
 
 	animation_tree = AnimationTree.new()
 	animation_tree.name = "AnimationTree"
@@ -499,16 +553,18 @@ func _setup_animation_tree() -> void:
 	animation_tree.active = true
 
 
-## A nine-point blend square for one speed tier: a dedicated clip per direction
-## plus the idle at the centre.
+## A nine-point blend square for one speed tier: a clip per direction plus the
+## idle at the centre.
 ##
-## The pack ships a real clip for each of the eight directions, including the
-## diagonals, so nothing here is interpolated between neighbours or reused across
-## sides. Every clip is authored with the rifle held, which is the whole point -
-## the model's own strafes are empty-handed and dropped the weapon to the hips.
+## The blend points are created without clip names and filled in by
+## `_apply_locomotion_set()`, which is also what a weapon switch calls - so a
+## pistol changes the whole square rather than rebuilding the tree.
+##
+## Every clip is weapon-held, which is the whole point: the model's own strafes
+## are empty-handed and dropped the weapon to the character's hips.
 func _create_directional_blend_space(
 	tier: StringName,
-	idle_animation: StringName
+	idle_key: StringName
 ) -> AnimationNodeBlendSpace2D:
 	var blend_space := AnimationNodeBlendSpace2D.new()
 	blend_space.min_space = Vector2(-1.0, -1.0)
@@ -518,20 +574,60 @@ func _create_directional_blend_space(
 	# Independent, because the eight clips are separate captures with their own
 	# stride timings - syncing them to a shared phase makes the feet skate.
 	blend_space.sync_mode = AnimationNodeBlendSpace2D.SYNC_MODE_INDEPENDENT
-	blend_space.add_blend_point(
-		_create_animation_node(idle_animation),
-		Vector2.ZERO,
-		-1,
-		&"idle"
-	)
-	for direction in LOCOMOTION_DIRECTIONS:
+	blend_space.add_blend_point(_create_blend_point(&"", idle_key), Vector2.ZERO, -1, &"idle")
+	for direction in LocomotionSets.DIRECTIONS:
 		blend_space.add_blend_point(
-			_create_animation_node(StringName("%s_%s" % [tier, direction])),
-			LOCOMOTION_DIRECTIONS[direction],
+			_create_blend_point(tier, direction),
+			LocomotionSets.DIRECTIONS[direction],
 			-1,
 			direction
 		)
 	return blend_space
+
+
+## An empty animation node, registered so `_apply_locomotion_set()` can find it
+## again. An empty `tier` marks a square's centre idle, whose key names an entry
+## in the set definition directly rather than one inside a tier.
+func _create_blend_point(tier: StringName, key: StringName) -> AnimationNodeAnimation:
+	var node := AnimationNodeAnimation.new()
+	blend_points.append({"node": node, "tier": tier, "key": key})
+	return node
+
+
+## Points every blend square at one set's clips.
+##
+## Refused wholesale if any clip is missing, rather than applied partially: a
+## square with a few dead points is a character who freezes when they strafe,
+## which is harder to diagnose than simply keeping the stance they had.
+func _apply_locomotion_set(set_name: StringName) -> bool:
+	var definition := LocomotionSets.get_set(set_name)
+	var resolved: Array[StringName] = []
+	for point in blend_points:
+		var clip: StringName = (
+			definition[point.key] if point.tier == &"" else definition[point.tier][point.key]
+		)
+		var installed := LocomotionSets.installed_name(set_name, clip)
+		if not anim_player.has_animation(installed):
+			push_warning(
+				"Locomotion set '%s' is missing '%s'; staying on '%s'."
+				% [set_name, installed, current_set]
+			)
+			return false
+		resolved.append(installed)
+
+	for index in blend_points.size():
+		blend_points[index].node.animation = resolved[index]
+	current_set = set_name
+	set_has_sprint = LocomotionSets.has_distinct_sprint(set_name)
+	return true
+
+
+## Swaps the body's stance to match the weapon being carried.
+func _on_weapon_changed(weapon: WeaponData, _slot: int) -> void:
+	if weapon == null or blend_points.is_empty():
+		return
+	if weapon.locomotion_set != current_set:
+		_apply_locomotion_set(weapon.locomotion_set)
 
 
 func _create_animation_node(
@@ -568,23 +664,28 @@ func _is_upper_body_track(track_path: NodePath) -> bool:
 	return bone_name.begins_with("mixamorig_")
 
 
-## Every clip the blend tree drives, so the guard checks what it actually builds
-## rather than a hand-kept list that drifts out of date whenever a tier changes.
+## Whether the tree can be built at all. Only the default set is required: a
+## second set that failed to convert should cost that weapon its stance, not cost
+## the game its animation.
 func _has_locomotion_clips() -> bool:
 	var required: Array[StringName] = [&"fire", &"fire_move", &"reload"]
-	required.append_array(SINGLE_CLIPS)
-	for tier in [&"run", &"sprint", &"walk_crouching"]:
-		for direction in LOCOMOTION_DIRECTIONS:
-			required.append(StringName("%s_%s" % [tier, direction]))
+	required.append_array(LocomotionSets.clip_paths(DEFAULT_SET).keys())
 	return _has_animations(required)
 
 
 ## Locomotion loops; one-shots are listed separately in _configure_animation_loops.
 func _looping_clip_names() -> Array[StringName]:
-	var names: Array[StringName] = [&"idle_aiming", &"idle_crouching_aiming", &"jump_loop"]
-	for tier in LOCOMOTION_TIERS:
-		for direction in LOCOMOTION_DIRECTIONS:
-			names.append(StringName("%s_%s" % [tier, direction]))
+	var names: Array[StringName] = []
+	for set_name in INSTALLED_SETS:
+		var definition := LocomotionSets.get_set(set_name)
+		names.append(LocomotionSets.installed_name(set_name, definition.idle))
+		names.append(LocomotionSets.installed_name(set_name, definition.crouch_idle))
+		names.append(LocomotionSets.installed_name(set_name, definition.jump_loop))
+		for tier in LocomotionSets.TIERS:
+			for direction in LocomotionSets.DIRECTIONS:
+				names.append(
+					LocomotionSets.installed_name(set_name, definition[tier][direction])
+				)
 	return names
 
 
@@ -604,21 +705,28 @@ func _update_locomotion_blend(
 		input_dir,
 		minf(delta * LOCOMOTION_BLEND_SPEED, 1.0)
 	)
+	# A set without its own sprint stays on the normal tier - see
+	# LocomotionSets.has_distinct_sprint - and covers the extra ground by running
+	# its stride faster instead.
 	sprint_blend = move_toward(
 		sprint_blend,
-		1.0 if is_sprinting else 0.0,
+		1.0 if (is_sprinting and set_has_sprint) else 0.0,
 		delta * STANCE_BLEND_SPEED
+	)
+	var stride_scale := (
+		SPRINT_SPEED / WALK_SPEED if (is_sprinting and not set_has_sprint) else 1.0
 	)
 	stance_blend = move_toward(
 		stance_blend,
 		1.0 if is_crouching else 0.0,
 		delta * STANCE_BLEND_SPEED
 	)
-	animation_tree.set("parameters/WalkSpace/blend_position", locomotion_blend)
-	animation_tree.set("parameters/RunSpace/blend_position", locomotion_blend)
+	animation_tree.set("parameters/NormalSpace/blend_position", locomotion_blend)
+	animation_tree.set("parameters/SprintSpace/blend_position", locomotion_blend)
 	animation_tree.set("parameters/CrouchSpace/blend_position", locomotion_blend)
-	animation_tree.set("parameters/RunBlend/blend_amount", sprint_blend)
+	animation_tree.set("parameters/SprintBlend/blend_amount", sprint_blend)
 	animation_tree.set("parameters/StanceBlend/blend_amount", stance_blend)
+	animation_tree.set("parameters/LocomotionSpeed/scale", stride_scale)
 
 
 func _play_full_body_animation(
@@ -649,6 +757,7 @@ func _on_animation_finished(animation_name: StringName) -> void:
 	if animation_name == _find_animation([&"death"]):
 		return
 	active_full_body_animation = &""
+	is_playing_landing = false
 	if is_on_floor():
 		_set_animation_tree_active(true)
 

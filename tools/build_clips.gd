@@ -5,10 +5,17 @@ extends SceneTree
 ## Run from the project root:
 ##   (stage the FBXs - see below)
 ##   godot --headless --path . --import
-##   godot --headless --path . --script tools/build_clips.gd
+##   godot --headless --path . --script tools/build_clips.gd -- <set>
+##
+## <set> names the locomotion set the pack becomes - "rifle" or "pistol" - and is
+## the folder the clips land in. Defaults to "rifle".
 ##
 ## Every .fbx in the staging folder is converted, named after its file. There is
-## no table to maintain: drop a pack in, run it, and the clips appear.
+## no table to maintain here: drop a pack in, run it, and the clips appear. What
+## each clip is *for* is decided separately, in scripts/player/locomotion_sets.gd,
+## because packs cover different ground and name things differently - and because
+## which of two unlabelled strafes is the left one has to be measured, not
+## guessed. tools/probe_locomotion_sets.gd prints those measurements.
 ##
 ## Why loose .res files rather than rebuilding mixamo_soldier.glb: the body model
 ## is the game's main character asset, and rewriting it in place to change clips
@@ -21,17 +28,30 @@ extends SceneTree
 ## Delete the folder again afterwards.
 
 const STAGING_DIR := "res://assets/models/characters/_clip_import"
-const OUTPUT_DIR := "res://assets/animations/rifle"
+const OUTPUT_ROOT := "res://assets/animations"
+## Which set the staged clips belong to. Packs differ in what they cover and what
+## they call things, so each lands in its own folder and is mapped separately -
+## see LocomotionSets.
+const DEFAULT_SET := "rifle"
 
 
 func _initialize() -> void:
+	# godot ... --script tools/build_clips.gd -- pistol
+	var arguments := OS.get_cmdline_user_args()
+	var set_name: String = arguments[0] if arguments.size() > 0 else DEFAULT_SET
+	var output_dir := OUTPUT_ROOT.path_join(set_name)
+	print("Building the '%s' set into %s" % [set_name, output_dir])
+	_build(output_dir)
+
+
+func _build(OUTPUT_DIR: String) -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUTPUT_DIR))
 	var written := 0
 	var skipped := 0
 	for file_name in DirAccess.get_files_at(STAGING_DIR):
 		if not file_name.ends_with(".fbx"):
 			continue
-		if _extract(file_name.get_basename(), file_name):
+		if _extract(file_name.get_basename(), file_name, OUTPUT_DIR):
 			written += 1
 		else:
 			skipped += 1
@@ -42,7 +62,7 @@ func _initialize() -> void:
 	quit()
 
 
-func _extract(output_name: String, source_file: String) -> bool:
+func _extract(output_name: String, source_file: String, output_dir: String) -> bool:
 	var source_path := STAGING_DIR.path_join(source_file)
 	if not ResourceLoader.exists(source_path):
 		push_warning("%s is not imported; skipping." % source_path)
@@ -68,7 +88,7 @@ func _extract(output_name: String, source_file: String) -> bool:
 	animation.loop_mode = Animation.LOOP_LINEAR
 	_strip_root_motion(animation)
 
-	var error := ResourceSaver.save(animation, OUTPUT_DIR.path_join(output_name + ".res"))
+	var error := ResourceSaver.save(animation, output_dir.path_join(output_name + ".res"))
 	if error != OK:
 		push_error("Could not write %s: %s" % [output_name, error_string(error)])
 	scene.queue_free()

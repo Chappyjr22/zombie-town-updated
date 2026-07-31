@@ -18,12 +18,26 @@ enum State { IDLE, CHASE, ATTACK, DEAD }
 ## the Inspector directly.
 @export var model_yaw_offset_degrees := 180.0
 
+## How close to the head bone a shot has to land to count as a headshot. Sized
+## against the head bone's origin, which sits at the base of the skull, so this
+## covers the head and not much neck.
+const HEADSHOT_RADIUS := 0.28
+## Head bone names across the rigs in use. Mixamo prefixes with `mixamorig_`; the
+## legacy Quaternius model just calls it Head.
+const HEAD_BONE_NAMES := ["mixamorig_Head", "Head", "head"]
+
 var health: float
 var state: State = State.IDLE
 var attack_timer: float = 0.0
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var locked_animation: StringName = &""
 var attack_animation_index := 0
+var navigation_agent: NavigationAgent3D
+var _head_bone_index := -1
+
+## Emitted once, when this zombie dies. `RoundDirector` counts rounds off this,
+## so it must fire exactly once - `die()` is guarded by the DEAD state.
+signal died(zombie: Zombie)
 
 @onready var collision_shape: CollisionShape3D = $CollisionShape3D
 @onready var model: Node3D = $Model
@@ -59,6 +73,39 @@ func _ready() -> void:
 	if anim_player:
 		_configure_animation_loops()
 		anim_player.animation_finished.connect(_on_animation_finished)
+	if skeleton:
+		for bone_name in HEAD_BONE_NAMES:
+			_head_bone_index = skeleton.find_bone(bone_name)
+			if _head_bone_index >= 0:
+				break
+	_setup_navigation()
+
+
+## Adds the pathfinding agent in code rather than to each of the three zombie
+## scenes, so the variants can't drift apart on it.
+##
+## Whether it's actually used is decided per frame by `_has_navigation_mesh()`:
+## the flat test arena has no baked navmesh and doesn't need one, and a level
+## without one should still get zombies that walk at you rather than zombies that
+## stand still waiting for a path that will never come.
+func _setup_navigation() -> void:
+	navigation_agent = NavigationAgent3D.new()
+	navigation_agent.name = "NavigationAgent3D"
+	# Sized to the capsule. The separation radius keeps a round from stacking
+	# every zombie into the same column as they funnel toward the player.
+	navigation_agent.radius = 0.45
+	navigation_agent.height = 1.8
+	navigation_agent.path_desired_distance = 0.6
+	navigation_agent.target_desired_distance = attack_range * 0.8
+	navigation_agent.avoidance_enabled = false
+	add_child(navigation_agent)
+
+
+func _has_navigation_mesh() -> bool:
+	if navigation_agent == null:
+		return false
+	var map := navigation_agent.get_navigation_map()
+	return map.is_valid() and not NavigationServer3D.map_get_regions(map).is_empty()
 
 
 func _physics_process(delta: float) -> void:
@@ -96,13 +143,33 @@ func _physics_process(delta: float) -> void:
 			_attack(target)
 	else:
 		state = State.CHASE
-		var dir := to_target.normalized()
+		var dir := _chase_direction(target, to_target)
 		velocity.x = dir.x * move_speed
 		velocity.z = dir.z * move_speed
-		look_at(Vector3(target.global_position.x, global_position.y, target.global_position.z), Vector3.UP)
+		# Faces where it is going, not where the player is - otherwise a zombie
+		# routing around a building walks sideways with its head turned.
+		var facing := global_position + dir
+		look_at(Vector3(facing.x, global_position.y, facing.z), Vector3.UP)
 
 	move_and_slide()
 	_update_animation()
+
+
+## Which way to walk this frame: around obstacles where the level has a navmesh,
+## straight at the player where it doesn't.
+func _chase_direction(target: Node3D, to_target: Vector3) -> Vector3:
+	if not _has_navigation_mesh():
+		return to_target.normalized()
+	navigation_agent.target_position = target.global_position
+	if navigation_agent.is_navigation_finished():
+		return to_target.normalized()
+	var step := navigation_agent.get_next_path_position() - global_position
+	step.y = 0.0
+	# A degenerate step means the agent is standing on its own waypoint; walking
+	# at the player beats stalling until the next path update.
+	if step.length_squared() < 0.0001:
+		return to_target.normalized()
+	return step.normalized()
 
 
 func _find_nearest_player() -> Node3D:
@@ -145,8 +212,28 @@ func take_damage(amount: float, hit_impulse: Vector3 = Vector3.ZERO) -> void:
 		_play_anim([&"HitReact", &"HitRecieve", &"Scream"], true, true)
 
 
+func is_dead() -> bool:
+	return state == State.DEAD
+
+
+## Whether a shot that landed at `world_position` hit the head, measured against
+## the live head bone rather than a height threshold - so a crouched, lunging or
+## mid-death-animation zombie is still scored on where its head actually is.
+##
+## Falls back to body on a rig with no recognisable head bone, which costs the
+## player a bonus rather than handing them one for a miss.
+func classify_hit(world_position: Vector3) -> StringName:
+	if skeleton == null or _head_bone_index < 0:
+		return &"body"
+	var head := skeleton.global_transform * skeleton.get_bone_global_pose(_head_bone_index).origin
+	return &"head" if head.distance_to(world_position) <= HEADSHOT_RADIUS else &"body"
+
+
 func die(_hit_impulse: Vector3 = Vector3.ZERO) -> void:
+	if state == State.DEAD:
+		return
 	state = State.DEAD
+	died.emit(self)
 	set_physics_process(false)
 	if collision_shape:
 		collision_shape.disabled = true

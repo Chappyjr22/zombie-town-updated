@@ -15,6 +15,7 @@ class_name WeaponController
 
 ## Bones the weapon is fitted against on the body.
 const GRIP_HAND_BONE := &"mixamorig_RightHand"
+const GRIP_FOREARM_BONE := &"mixamorig_RightForeArm"
 const SUPPORT_HAND_BONE := &"mixamorig_LeftHand"
 const SUPPORT_UPPER_ARM_BONE := &"mixamorig_LeftArm"
 const SUPPORT_FOREARM_BONE := &"mixamorig_LeftForeArm"
@@ -84,6 +85,11 @@ signal fired
 signal reload_started(duration: float)
 signal aim_changed(is_aiming: bool)
 signal weapon_changed(weapon: WeaponData, slot: int)
+## A shot that connected with something damageable. `part` is &"head" or &"body";
+## `killed` is whether this shot finished it. The player turns these into points
+## and the HUD turns them into a hitmarker - the controller deliberately knows
+## about neither.
+signal hit_confirmed(part: StringName, killed: bool)
 
 
 func _ready() -> void:
@@ -188,14 +194,19 @@ func attach_world_model(skeleton: Skeleton3D, bone_name: StringName) -> void:
 ## is holding it, in any clip, rather than at an angle guessed against that frame.
 func _align_world_model() -> void:
 	var grip_index := world_model_skeleton.find_bone(GRIP_HAND_BONE)
-	var support_index := world_model_skeleton.find_bone(SUPPORT_HAND_BONE)
-	if grip_index < 0 or support_index < 0:
+	# A two-handed weapon lies along the line between the hands. A handgun is held
+	# in one, so there is no second point to measure against - it extends the
+	# forearm instead, which is how a pistol is actually pointed.
+	var two_handed := current_weapon == null or current_weapon.uses_support_hand
+	var reference_index := world_model_skeleton.find_bone(
+		SUPPORT_HAND_BONE if two_handed else GRIP_FOREARM_BONE
+	)
+	if grip_index < 0 or reference_index < 0:
 		world_model_aligned = true
 		return
 	var grip_pose := world_model_skeleton.get_bone_global_pose(grip_index)
-	var barrel := (
-		world_model_skeleton.get_bone_global_pose(support_index).origin - grip_pose.origin
-	)
+	var reference: Vector3 = world_model_skeleton.get_bone_global_pose(reference_index).origin
+	var barrel := (reference - grip_pose.origin) if two_handed else (grip_pose.origin - reference)
 	if barrel.length_squared() < 0.0001:
 		return
 	var into_hand := grip_pose.basis.orthonormalized().inverse()
@@ -373,6 +384,8 @@ func _canonical_weapon_basis(bounds: AABB) -> Basis:
 ## solve is free to fold the arm through the character's chest.
 func _solve_support_arm_ik() -> void:
 	if world_model == null or support_upper_index < 0:
+		return
+	if current_weapon != null and not current_weapon.uses_support_hand:
 		return
 	var skeleton := world_model_skeleton
 	var into_skeleton: Transform3D = (
@@ -638,8 +651,20 @@ func _hitscan() -> void:
 	var query := PhysicsRayQueryParameters3D.create(muzzle, aim_point)
 	query.exclude = exclude
 	var result := space_state.intersect_ray(query)
-	if result and result.has("collider") and result.collider.has_method("take_damage"):
-		result.collider.take_damage(current_weapon.damage)
+	if not (result and result.has("collider") and result.collider.has_method("take_damage")):
+		return
+
+	var target: Node = result.collider
+	# Classified before the damage lands, because a zombie that dies to this shot
+	# stops animating - and the head bone this is measured against moves when it
+	# does. Asking afterwards would score the corpse's pose, not the shot.
+	var part: StringName = (
+		target.classify_hit(result.position) if target.has_method("classify_hit")
+		else &"body"
+	)
+	target.take_damage(current_weapon.damage)
+	var killed: bool = target.has_method("is_dead") and target.is_dead()
+	hit_confirmed.emit(part, killed)
 
 
 func _try_reload() -> void:

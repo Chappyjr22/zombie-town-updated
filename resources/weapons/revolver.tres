@@ -18,3 +18,5 @@ mag_size = 6
 reload_time = 2.5
 weapon_range = 50.0
 starting_reserve_ammo = 36
+locomotion_set = &"pistol"
+uses_support_hand = false
