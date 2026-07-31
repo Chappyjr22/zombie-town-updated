@@ -7,7 +7,7 @@
 
 [resource]
 script = ExtResource("1")
-display_name = "Assault Rifle (AK-pattern)"
+display_name = "M4A1"
 model_scene = ExtResource("2")
 fire_sound = ExtResource("3")
 reload_sound = ExtResource("4")

@@ -3,9 +3,11 @@
 importer="texture"
 type="CompressedTexture2D"
 uid="uid://bb3iie104ky0o"
-path="res://.godot/imported/luger_luger-base.jpg-44e9b05ca7e19041187a5b88aec79d85.ctex"
+path.s3tc="res://.godot/imported/luger_luger-base.jpg-44e9b05ca7e19041187a5b88aec79d85.s3tc.ctex"
+path.etc2="res://.godot/imported/luger_luger-base.jpg-44e9b05ca7e19041187a5b88aec79d85.etc2.ctex"
 metadata={
-"vram_texture": false
+"imported_formats": ["s3tc_bptc", "etc2_astc"],
+"vram_texture": true
 }
 generator_parameters={
 "md5": "9d2d3fc99160453b41f107535fc56307"
@@ -14,11 +16,11 @@ generator_parameters={
 [deps]
 
 source_file="res://assets/models/weapons/cc0/luger_luger-base.jpg"
-dest_files=["res://.godot/imported/luger_luger-base.jpg-44e9b05ca7e19041187a5b88aec79d85.ctex"]
+dest_files=["res://.godot/imported/luger_luger-base.jpg-44e9b05ca7e19041187a5b88aec79d85.s3tc.ctex", "res://.godot/imported/luger_luger-base.jpg-44e9b05ca7e19041187a5b88aec79d85.etc2.ctex"]
 
 [params]
 
-compress/mode=0
+compress/mode=2
 compress/high_quality=false
 compress/lossy_quality=0.7
 compress/uastc_level=0
@@ -40,4 +42,4 @@ process/normal_map_invert_y=false
 process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
-detect_3d/compress_to=1
+detect_3d/compress_to=0

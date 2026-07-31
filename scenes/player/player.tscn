@@ -5,6 +5,13 @@
 [ext_resource type="Script" uid="uid://b6jpo0fpjyenh" path="res://scripts/weapons/weapon_controller.gd" id="3"]
 [ext_resource type="Resource" path="res://resources/weapons/assault_rifle.tres" id="4"]
 [ext_resource type="Script" uid="uid://4os3wqyqmbqv" path="res://scripts/ui/crosshair.gd" id="5"]
+[ext_resource type="Resource" path="res://resources/weapons/assault_rifle_2.tres" id="6"]
+[ext_resource type="Resource" path="res://resources/weapons/shotgun.tres" id="7"]
+[ext_resource type="Resource" path="res://resources/weapons/sniper_rifle.tres" id="8"]
+[ext_resource type="Resource" path="res://resources/weapons/submachine_gun.tres" id="9"]
+[ext_resource type="Resource" path="res://resources/weapons/bullpup.tres" id="10"]
+[ext_resource type="Resource" path="res://resources/weapons/pistol.tres" id="11"]
+[ext_resource type="Resource" path="res://resources/weapons/revolver.tres" id="12"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_1"]
 radius = 0.4
@@ -32,7 +39,7 @@ fov = 70.0
 
 [node name="WeaponController" type="Node3D" parent="CameraRig/SpringArm3D/Camera3D" unique_id=1428573344]
 script = ExtResource("3")
-starting_weapon = ExtResource("4")
+loadout = [ExtResource("4"), ExtResource("6"), ExtResource("7"), ExtResource("8"), ExtResource("9"), ExtResource("10"), ExtResource("11"), ExtResource("12")]
 
 [node name="AudioStreamPlayer3D" type="AudioStreamPlayer3D" parent="CameraRig/SpringArm3D/Camera3D/WeaponController" unique_id=696417278]
 

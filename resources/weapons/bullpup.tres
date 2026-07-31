@@ -7,7 +7,7 @@
 
 [resource]
 script = ExtResource("1")
-display_name = "Bullpup Rifle"
+display_name = "Grease Gun M3"
 model_scene = ExtResource("2")
 fire_sound = ExtResource("3")
 reload_sound = ExtResource("4")

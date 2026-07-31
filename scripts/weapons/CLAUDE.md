@@ -24,12 +24,12 @@ Recoil is a spring on the **camera** (`_update_recoil`), not on a weapon model.
 
 The game was first person for a while, with a conventional viewmodel — arms carved out of the soldier, weapon posed in camera space, hands pinned and IK'd onto it. It's gone. `docs/ASSET_PIPELINE.md` records why, so the same ground isn't covered twice.
 - `resources/weapons/*.tres` — one `WeaponData` instance per weapon model in `assets/models/weapons/`, mapped to the closest-matching fire/reload sound in `assets/audio/weapons/` (see that file's header comment or `ASSET_MANIFEST.md` for the mapping).
-- Wired into `scenes/player/player.tscn` as `CameraRig/SpringArm3D/Camera3D/WeaponController`, defaulting to `resources/weapons/assault_rifle.tres`.
+- Wired into `scenes/player/player.tscn` as `CameraRig/SpringArm3D/Camera3D/WeaponController`, carrying all eight weapons, starting on the AK-47.
 
 ## Known gaps / simplifications
 
 - **Shotguns fire a single hitscan ray**, not a pellet spread. `shotgun.tres` and `shotgun_sawedoff.tres` compensate with a higher flat `damage`, but a real multi-pellet cone (several raycasts per trigger pull) would feel more shotgun-like. Worth revisiting.
-- **No weapon switching yet** — the player always starts with (and is stuck on) the assault rifle. Swapping `WeaponController.equip()` to a different `WeaponData` at runtime already works; there's just no input/UI wired to trigger it.
+- **Weapon switching** is wired: `loadout` on the `WeaponController` holds the carried weapons, number keys 1-9 pick a slot and the scroll wheel cycles. Ammo is stored per slot in `_stored_ammo`, so switching away and back is not a free reload, and switching is refused mid-reload so it cannot be used to cancel one and keep the rounds. There is no draw/holster animation - weapons swap instantly.
 - **Weapons are seated by three `Marker3D` sockets** on their `scenes/weapons/*.tscn`: `Grip` and `Foregrip` are wrist positions, `Muzzle` sits on the bore and its `-Z` facing is the barrel direction. Placed by hand in the editor against the model, which is the only reliable way — the hand sockets are offset from the weapon by the thickness of a hand, so nothing about the hold can be inferred from the silhouette. `_fit_to_grip()` falls back to the old bounding-box heuristic only for weapons without sockets.
 - **The support hand's rotation isn't controlled.** `_solve_support_arm_ik()` puts the wrist on `foregrip_anchor` (measured at 0.035m from the socket), but the hand's *orientation* and finger curl still come from the clip, so the palm doesn't wrap the handguard. The last change in flight was locking the hand's basis to the weapon's via `support_hand_rotation_degrees` — that export exists and is untuned.
 - **ADS only narrows the FOV and pulls the camera in.** The weapon is posed by the animation, so there's no sight alignment.

@@ -19,7 +19,9 @@ const SUPPORT_HAND_BONE := &"mixamorig_LeftHand"
 const SUPPORT_UPPER_ARM_BONE := &"mixamorig_LeftArm"
 const SUPPORT_FOREARM_BONE := &"mixamorig_LeftForeArm"
 
-@export var starting_weapon: WeaponData
+## Everything the player is carrying, in slot order. Number keys select directly;
+## the scroll wheel cycles. The first entry is what they start holding.
+@export var loadout: Array[WeaponData] = []
 
 @export_group("Weapon in hand")
 ## Fine adjustment to how the weapon sits in the body's hand. The orientation is
@@ -43,6 +45,9 @@ const SUPPORT_FOREARM_BONE := &"mixamorig_LeftForeArm"
 
 var camera: Camera3D
 var current_weapon: WeaponData
+var current_slot := 0
+## Ammo left in each slot, so switching away and back is not a free reload.
+var _stored_ammo := {}
 
 var world_model_attachment: BoneAttachment3D
 var world_model: Node3D
@@ -78,6 +83,7 @@ signal ammo_changed(ammo_in_mag: int, reserve_ammo: int)
 signal fired
 signal reload_started(duration: float)
 signal aim_changed(is_aiming: bool)
+signal weapon_changed(weapon: WeaponData, slot: int)
 
 
 func _ready() -> void:
@@ -88,20 +94,53 @@ func _ready() -> void:
 	camera = get_parent() as Camera3D
 	if camera:
 		hip_camera_fov = camera.fov
-	if starting_weapon:
-		equip(starting_weapon)
+	if not loadout.is_empty():
+		equip_slot(0)
+
+
+## Switches to a slot, remembering how much ammo the outgoing weapon had left.
+##
+## Without that bookkeeping, switching away and back would refill the magazine,
+## which is a free reload.
+func equip_slot(slot: int) -> void:
+	if slot < 0 or slot >= loadout.size() or loadout[slot] == null:
+		return
+	if slot == current_slot and current_weapon != null:
+		return
+	if current_weapon != null:
+		_stored_ammo[current_slot] = Vector2i(ammo_in_mag, reserve_ammo)
+	current_slot = slot
+	equip(loadout[slot])
+
+
+## Steps through the loadout, wrapping at both ends and skipping empty slots.
+func cycle_weapon(direction: int) -> void:
+	if loadout.size() < 2:
+		return
+	var slot := current_slot
+	for _step in loadout.size():
+		slot = wrapi(slot + direction, 0, loadout.size())
+		if loadout[slot] != null:
+			equip_slot(slot)
+			return
 
 
 func equip(weapon: WeaponData) -> void:
 	current_weapon = weapon
-	ammo_in_mag = weapon.mag_size
-	reserve_ammo = weapon.starting_reserve_ammo
+	# Picked up where this weapon was left, or full if it hasn't been carried yet.
+	var carried: Vector2i = _stored_ammo.get(
+		current_slot,
+		Vector2i(weapon.mag_size, weapon.starting_reserve_ammo)
+	)
+	ammo_in_mag = carried.x
+	reserve_ammo = carried.y
 	is_reloading = false
 	fire_cooldown = 0.0
 	_set_aiming(false)
 	if world_model_skeleton:
 		attach_world_model(world_model_skeleton, GRIP_HAND_BONE)
 	ammo_changed.emit(ammo_in_mag, reserve_ammo)
+	weapon_changed.emit(weapon, current_slot)
 
 
 # ---------------------------------------------------------------- weapon model
@@ -471,6 +510,23 @@ func _process(delta: float) -> void:
 
 	if Input.is_action_just_pressed("reload"):
 		_try_reload()
+
+	_update_weapon_switching()
+
+
+## Number keys pick a slot directly, the scroll wheel steps through. Ignored
+## mid-reload so a switch can't be used to cancel one and keep the rounds.
+func _update_weapon_switching() -> void:
+	if is_reloading:
+		return
+	for slot in mini(loadout.size(), 9):
+		if Input.is_action_just_pressed("weapon_slot_%d" % (slot + 1)):
+			equip_slot(slot)
+			return
+	if Input.is_action_just_pressed("weapon_next"):
+		cycle_weapon(1)
+	elif Input.is_action_just_pressed("weapon_previous"):
+		cycle_weapon(-1)
 
 
 func _update_aim(delta: float) -> void:

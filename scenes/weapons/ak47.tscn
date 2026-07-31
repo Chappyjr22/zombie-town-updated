@@ -1,16 +1,16 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://cshcfe0ngw7uj"]
 
-[ext_resource type="PackedScene" path="res://assets/models/weapons/cc0/ak47.glb" id="1_qiwwx"]
+[ext_resource type="PackedScene" uid="uid://c5i43lhtt2ii1" path="res://assets/models/weapons/cc0/ak47.glb" id="1_qiwwx"]
 
 [node name="Ak47" type="Node3D" unique_id=1075034029]
 
-[node name="Root Scene" type="Node3D" parent="." unique_id=2066108550 instance=ExtResource("1_qiwwx")]
+[node name="Root Scene" parent="." unique_id=2066108550 instance=ExtResource("1_qiwwx")]
 
 [node name="Grip" type="Marker3D" parent="." unique_id=103210154]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.14564353, 0.35668665)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0036532022, -0.11584604, 0.3665008)
 
 [node name="Foregrip" type="Marker3D" parent="." unique_id=692209007]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.064308584, -0.023680363, -0.018223573)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.07199751, -0.054144252, -0.00046828762)
 
 [node name="Muzzle" type="Marker3D" parent="." unique_id=1260733842]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0028077066, -0.051657416, -0.31568864)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0028077066, -0.0054785237, -0.31017983)
