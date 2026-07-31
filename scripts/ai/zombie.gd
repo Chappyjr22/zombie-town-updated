@@ -22,6 +22,8 @@ var health: float
 var state: State = State.IDLE
 var attack_timer: float = 0.0
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
+var locked_animation: StringName = &""
+var attack_animation_index := 0
 
 @onready var collision_shape: CollisionShape3D = $CollisionShape3D
 @onready var model: Node3D = $Model
@@ -54,6 +56,9 @@ func _ready() -> void:
 	if physical_bone_simulator:
 		physical_bone_simulator.physical_bones_stop_simulation()
 	model.rotation_degrees.y = model_yaw_offset_degrees
+	if anim_player:
+		_configure_animation_loops()
+		anim_player.animation_finished.connect(_on_animation_finished)
 
 
 func _physics_process(delta: float) -> void:
@@ -116,7 +121,16 @@ func _find_nearest_player() -> Node3D:
 
 func _attack(target: Node3D) -> void:
 	attack_timer = attack_cooldown
-	_play_anim(["Attack", "Idle_Attack", "Punch"])
+	var attack_variants := [&"Attack", &"Bite", &"BiteAlt", &"NeckBite"]
+	var selected_attack: StringName = attack_variants[
+		attack_animation_index % attack_variants.size()
+	]
+	attack_animation_index += 1
+	_play_anim(
+		[selected_attack, &"Attack", &"Idle_Attack", &"Punch"],
+		true,
+		true
+	)
 	if target.has_method("take_damage"):
 		target.take_damage(attack_damage)
 
@@ -128,29 +142,26 @@ func take_damage(amount: float, hit_impulse: Vector3 = Vector3.ZERO) -> void:
 	if health <= 0.0:
 		die(hit_impulse)
 	else:
-		_play_anim(["HitReact", "HitRecieve"])
+		_play_anim([&"HitReact", &"HitRecieve", &"Scream"], true, true)
 
 
-func die(hit_impulse: Vector3 = Vector3.ZERO) -> void:
+func die(_hit_impulse: Vector3 = Vector3.ZERO) -> void:
 	state = State.DEAD
 	set_physics_process(false)
-	if anim_player:
-		# stop(true) keeps the current pose instead of snapping back to the rest
-		# pose - plain stop() reset the skeleton to bind pose before physics
-		# simulation captured it, so every bone suddenly overlapped its neighbor
-		# and the physics engine violently shoved them apart to resolve it
-		# (the "zombies went flying" bug).
-		anim_player.stop(true)
 	if collision_shape:
 		collision_shape.disabled = true
 
-	if skeleton:
-		_isolate_ragdoll_bones()
-		if physical_bone_simulator:
-			physical_bone_simulator.physical_bones_start_simulation(_ragdoll_bone_names())
-		var bone := _find_impulse_bone(skeleton)
-		if bone and hit_impulse.length() > 0.0:
-			bone.apply_central_impulse(hit_impulse)
+	# Physics ragdoll (PhysicalBoneSimulator3D) kept stretching limbs into long
+	# spikes on this rig even after excluding finger/tongue/eyelid bones - a
+	# deeper joint/shape mismatch that needs hands-on tuning in the editor to
+	# fix properly. Falling back to the model's own authored "Death" clip
+	# instead: no physics tuning needed, and it's guaranteed to look right
+	# since it's professionally animated. `_play_anim` leaves it holding on
+	# its last frame once finished, which is exactly the collapsed pose we
+	# want for a corpse. Revisit physics ragdoll later if it's worth another
+	# pass - see PhysicsLayers.RAGDOLL / _isolate_ragdoll_bones /
+	# _ragdoll_bone_names below, still here but unused for now.
+	_play_anim([&"Death", &"DeathAlt"], true, true)
 
 	if corpse_lifetime > 0.0:
 		get_tree().create_timer(corpse_lifetime).timeout.connect(queue_free)
@@ -213,23 +224,80 @@ func _find_impulse_bone(root: Node) -> PhysicalBone3D:
 	return fallback
 
 
-func _play_anim(names: Array) -> void:
-	NodeUtils.play_first_available_animation(anim_player, names)
+func _find_animation(names: Array) -> StringName:
+	if anim_player == null:
+		return &""
+	for requested_name in names:
+		if anim_player.has_animation(requested_name):
+			return requested_name
+		for available_name in anim_player.get_animation_list():
+			if (
+				available_name == requested_name
+				or available_name.ends_with("|" + String(requested_name))
+			):
+				return available_name
+	return &""
+
+
+func _play_anim(
+	names: Array,
+	lock_until_finished := false,
+	force_restart := false
+) -> void:
+	var animation_name := _find_animation(names)
+	if animation_name == &"":
+		return
+	if (
+		not force_restart
+		and anim_player.current_animation == animation_name
+		and anim_player.is_playing()
+	):
+		return
+	if lock_until_finished:
+		locked_animation = animation_name
+	anim_player.play(animation_name, 0.12)
+
+
+func _configure_animation_loops() -> void:
+	for requested_name in [
+		&"Idle",
+		&"Idle_Attack",
+		&"Walk",
+		&"Run",
+		&"Crawl",
+		&"CrawlRun",
+	]:
+		var animation_name := _find_animation([requested_name])
+		if animation_name != &"":
+			anim_player.get_animation(animation_name).loop_mode = Animation.LOOP_LINEAR
+	for requested_name in [
+		&"Attack",
+		&"Bite",
+		&"BiteAlt",
+		&"NeckBite",
+		&"HitReact",
+		&"HitRecieve",
+		&"Scream",
+		&"Death",
+		&"DeathAlt",
+	]:
+		var animation_name := _find_animation([requested_name])
+		if animation_name != &"":
+			anim_player.get_animation(animation_name).loop_mode = Animation.LOOP_NONE
+
+
+func _on_animation_finished(animation_name: StringName) -> void:
+	if animation_name == locked_animation:
+		locked_animation = &""
 
 
 func _update_animation() -> void:
+	if locked_animation != &"":
+		return
 	match state:
 		State.CHASE:
-			_play_anim(["Run", "Walk"])
+			_play_anim([&"Run", &"Walk"])
 		State.IDLE:
-			_play_anim(["Idle"])
+			_play_anim([&"Idle"])
 		State.ATTACK:
-			# _attack() (on cooldown) plays a one-shot swing clip - once that clip
-			# finishes, Godot holds on its last frame since it doesn't loop, which
-			# looked like the zombie freezing mid-animation for the ~1s between
-			# swings. Playing a looping stance here fills that gap. attack_timer
-			# is only ever exactly attack_cooldown on the frame _attack() just
-			# reset it - skip re-triggering an animation that same frame so this
-			# doesn't immediately cut off the swing clip it plays.
-			if attack_timer < attack_cooldown:
-				_play_anim(["Idle_Attack", "Idle"])
+			_play_anim([&"Idle_Attack", &"Idle"])

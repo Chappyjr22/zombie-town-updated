@@ -15,3 +15,12 @@ Thumbs.db
 # Editor
 .vscode/
 *.tmp
+
+# Local Mixamo download/extraction duplicates. The curated source FBXs under
+# assets/models/characters/mixamo_soldier/ remain tracked.
+/mixamo_soldier/
+/assets/models/characters/mixamo_soldier.zip
+/assets/models/characters/mixamo_soldier/mixamo_soldier/
+
+# Debug renders written by tools/render_*.gd for eyeballing the viewmodel.
+/previews/

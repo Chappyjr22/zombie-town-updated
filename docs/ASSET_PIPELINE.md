@@ -7,6 +7,7 @@ Free assets only, license-checked before use. Preferred sources, roughly in orde
 | Need | Best source |
 |---|---|
 | Soldier / human character + animations | Mixamo |
+| First-person arms (**if ever moving off true first person**) | See the note below — do not carve them out of a body |
 | Zombie base model + animations | Mixamo (retarget a humanoid, reskin) or Sketchfab |
 | Guns | Kenney.nl weapon packs, Sketchfab (CC) |
 | Vehicles | Kenney.nl, Quaternius |
@@ -26,6 +27,21 @@ Free assets only, license-checked before use. Preferred sources, roughly in orde
 - Characters/zombies: import as glTF, keep skeleton, generate collision only where needed (usually not — capsule/box colliders are hand-authored in the scene instead).
 - Textures: let Godot generate mipmaps; compress with VRAM compression (already enabled in `project.godot`).
 - Keep source files (`.blend`, `.fbx`) out of the repo where possible — commit the exported `.glb`/`.gltf` only, to keep the repo lean.
+- Runtime GLBs and extracted model textures that match `.gitattributes` are stored with Git LFS. Keep rules narrowly scoped to genuinely large assets; do not migrate every legacy FBX/PNG without a deliberate history/storage review.
+
+## A shooter needs two character assets, and a rigged humanoid is only one of them
+
+- A **world model** — the third-person body other players see. `mixamo_soldier.glb` is this, and it's good at it.
+- A **view model** — arms only, modelled to *end* at a sleeve cuff, animated in camera space.
+
+Buying a great world model does not get you a view model, and a view model cannot reliably be carved out of one. This was tried here at length and abandoned: the arms of a full body have no cuff to end at, so a cut leaves an open tube that the camera's near plane slices into a flat sheet; boundary vertices keep part of their weight on a spine that is no longer in the mesh and smear into spikes when a clip twists; and Mixamo's clips are framed for a camera looking *at* a body, so nothing in them keeps the weapon on screen. The game now renders in true first person instead — the camera sits at the player's own head and the body is the viewmodel — which sidesteps all of it.
+
+Checking that a rigged humanoid has bones named `Hand`, `ForeArm` and so on proves nothing; nearly all of them do, this one included down to individual finger joints. When evaluating an arms asset, ask instead:
+
+1. Is the geometry **arms only**, terminating at a cuff?
+2. Does it ship **first-person** idle / walk / sprint / fire / reload?
+
+If either answer is no, it's a world model.
 
 ## Realism/quality bar
 

@@ -1,31 +1,55 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene format=3 uid="uid://cavx0sbef5hsh"]
 
-[ext_resource type="Script" path="res://scripts/player/player.gd" id="1"]
-[ext_resource type="PackedScene" path="res://assets/models/characters/soldier.glb" id="2"]
-[ext_resource type="Script" path="res://scripts/weapons/weapon_controller.gd" id="3"]
+[ext_resource type="Script" uid="uid://dw5u0gwrttne4" path="res://scripts/player/player.gd" id="1"]
+[ext_resource type="PackedScene" uid="uid://bwyu5xtgy5gto" path="res://assets/models/characters/mixamo_soldier.glb" id="2"]
+[ext_resource type="Script" uid="uid://b6jpo0fpjyenh" path="res://scripts/weapons/weapon_controller.gd" id="3"]
 [ext_resource type="Resource" path="res://resources/weapons/assault_rifle.tres" id="4"]
+[ext_resource type="Script" uid="uid://4os3wqyqmbqv" path="res://scripts/ui/crosshair.gd" id="5"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_1"]
 radius = 0.4
 height = 1.8
 
-[node name="Player" type="CharacterBody3D"]
+[node name="Player" type="CharacterBody3D" unique_id=2070627514]
 script = ExtResource("1")
 
-[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+[node name="CollisionShape3D" type="CollisionShape3D" parent="." unique_id=1977289755]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
 shape = SubResource("CapsuleShape3D_1")
 
-[node name="Model" parent="." instance=ExtResource("2")]
+[node name="Model" parent="." unique_id=1969560451 instance=ExtResource("2")]
 
-[node name="Head" type="Node3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.65, 0)
+[node name="CameraRig" type="Node3D" parent="." unique_id=390375705]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.45, 1.5, 0)
 
-[node name="Camera3D" type="Camera3D" parent="Head"]
+[node name="SpringArm3D" type="SpringArm3D" parent="CameraRig"]
+spring_length = 3.0
+margin = 0.3
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig/SpringArm3D" unique_id=609954707]
 current = true
+fov = 70.0
 
-[node name="WeaponController" type="Node3D" parent="Head/Camera3D"]
+[node name="WeaponController" type="Node3D" parent="CameraRig/SpringArm3D/Camera3D" unique_id=1428573344]
 script = ExtResource("3")
 starting_weapon = ExtResource("4")
 
-[node name="AudioStreamPlayer3D" type="AudioStreamPlayer3D" parent="Head/Camera3D/WeaponController"]
+[node name="AudioStreamPlayer3D" type="AudioStreamPlayer3D" parent="CameraRig/SpringArm3D/Camera3D/WeaponController" unique_id=696417278]
+
+[node name="HUD" type="CanvasLayer" parent="." unique_id=1861472215]
+
+[node name="Crosshair" type="Control" parent="HUD" unique_id=829798923]
+layout_mode = 3
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -32.0
+offset_top = -32.0
+offset_right = 32.0
+offset_bottom = 32.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("5")

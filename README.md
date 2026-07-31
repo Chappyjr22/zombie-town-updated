@@ -7,12 +7,27 @@ Multiplayer is listen-server: one player hosts, others connect directly to their
 ## Requirements
 
 - [Godot 4.3+](https://godotengine.org/download) (standard build, not .NET, unless we decide to use C#)
+- [Git LFS](https://git-lfs.com/) when cloning the repository — large runtime character models and their extracted textures are stored as LFS objects.
 
 ## Running the project
 
 1. Open Godot 4.
 2. Click **Import**, select this repo's `project.godot`.
 3. Press F5 to run.
+
+After a command-line clone, run `git lfs pull` before opening the project if your Git client did not fetch LFS objects automatically.
+
+## Controls
+
+- WASD — move
+- Mouse — look
+- Left Shift — sprint
+- Left Ctrl — crouch
+- Space — jump
+- Left mouse — fire
+- Right mouse — hold to aim down sights
+- R — reload
+- Esc — release/capture the mouse
 
 ## Distribution
 

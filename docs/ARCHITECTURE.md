@@ -1,5 +1,30 @@
 # Architecture
 
+## Perspective: third person
+
+The game is a **third-person** shooter. The camera orbits the player on a
+`SpringArm3D` (so walls push it in rather than clipping through), the character
+always faces where the camera looks, and aiming pulls the camera in over the
+shoulder.
+
+That last part matters for animation: because the body faces the aim direction
+rather than the movement direction, strafing and walking backwards are real
+states, which is exactly what the directional walk/run blend space in
+`scripts/player/player.gd` is built for.
+
+### Why not first person
+
+It was first person for a while, and it was abandoned deliberately. The short
+version: **a shooter needs two character assets**, a *world model* (the
+third-person body other players see) and a *view model* (arms only, ending at a
+cuff, animated in camera space). `mixamo_soldier.glb` is a world model, and a
+view model can't reliably be derived from one - arms cut out of a full body have
+no cuff to terminate at, and clips authored for a camera looking *at* a body
+don't keep a weapon inside a camera looking *out* of its eyes.
+
+`docs/ASSET_PIPELINE.md` has the full account and the two questions to ask of any
+arms asset. Don't re-derive this; it cost a lot to learn.
+
 ## Goals
 
 - Keep everything Claude/agent-editable as **text** (Godot `.tscn`/`.tres`/`.gd` are text by default — keep it that way, avoid binary-packed scenes).

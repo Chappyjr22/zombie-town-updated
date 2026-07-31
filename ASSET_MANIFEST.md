@@ -10,8 +10,13 @@ Columns: Path · Source · License · Notes (poly count / rig / usage)
 |---|---|---|---|
 | `characters/soldier.glb` | [poly.pizza/m/PpLF4rt4ah](https://poly.pizza/m/PpLF4rt4ah) — "Character Soldier" by Quaternius | CC0 | Rigged + animated: `Idle`, `Idle_Shoot`, `Run`, `Run_Gun`, `Jump`, `Jump_Idle`, `Jump_Land`, `Duck`, `Punch`, `HitReact`, `Death`, `Wave`, `Yes`, `No`. Candidate for the player model — has run/shoot poses out of the box. |
 | `characters/swat.glb` | [poly.pizza/m/Btfn3G5Xv4](https://poly.pizza/m/Btfn3G5Xv4) — "SWAT" by Quaternius | CC0 | Rigged + animated: `Idle`, `Idle_Gun`, `Idle_Gun_Pointing`, `Idle_Gun_Shoot`, `Gun_Shoot`, `Run`, `Run_Shoot`, `Run_Left/Right/Back`, `Walk`, `Roll`, `Kick_Left/Right`, `Punch_Left/Right`, `HitRecieve` (x2), `Death`, plus sword/interact/wave extras. Larger animation set than `soldier.glb` — likely the better player-model pick. |
+| `characters/mixamo_soldier.glb` | [Adobe Mixamo](https://www.mixamo.com/) — Gasmask Soldier character + animation library | [Mixamo royalty-free use](https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html) | Current player **world model** — the third-person body other players see. Consolidated runtime glTF with `idle`, `walk`, `run`, `move_back`, `strafe_left`, `strafe_right`, `crouch_idle`, `crouch_walk`, `jump_start`, `jump_air`, `jump_land`, `fire`, `fire_move`, `reload`, `hit`, and `death`. Raw FBX downloads live in `characters/mixamo_soldier/` and are excluded from Godot import by `.gdignore`. |
+| `animations/rifle_aim_idle.res` | Adobe Mixamo — "Rifle Aiming Idle", extracted by `tools/build_clips.gd` | [Mixamo royalty-free use](https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html) | Loaded over the soldier's `idle` at runtime by `scripts/player/player.gd`. The stock idle carries the rifle across the chest — a patrol carry rather than a soldier ready to fire. |
+| `animations/rifle_sprint.res` | Adobe Mixamo — "Sprint Forward", extracted by `tools/build_clips.gd` | same | Loaded as `sprint`. The consolidated model has **no sprint clip at all**, so sprinting previously played `run` and was indistinguishable from jogging. |
 
-Both skeletons are named `CharacterArmature` internally but are **not** guaranteed bone-compatible with each other (different node counts — 78 vs 85). Don't assume animations can be swapped between the two without checking in Godot's animation retargeting first.
+Both are loose `Animation` resources rather than a rebuilt `.glb`, so the player model itself is never rewritten. Their track paths (`Skeleton3D:mixamorig_*`) already address the soldier's skeleton, so they drop straight on with no retargeting.
+
+The two legacy Quaternius skeletons are both named `CharacterArmature` internally but are **not** guaranteed bone-compatible (different node counts — 78 vs 85). The Mixamo player uses a different `mixamorig_` skeleton. Don't swap animations between these models without checking Godot's animation retargeting first.
 
 ## Zombies
 
@@ -20,6 +25,8 @@ Both skeletons are named `CharacterArmature` internally but are **not** guarante
 | `zombies/zombie.glb` | [poly.pizza/m/JoBvxIUpZP](https://poly.pizza/m/JoBvxIUpZP) — "Zombie" by Quaternius | CC0 | Rigged + animated: `Idle`, `Walk`, `Run`, `Attack`, `Jump`, `HitRecieve`, `Death`. Smaller skeleton (20 nodes) than the player models. |
 | `zombies/zombie-alt.glb` | [poly.pizza/m/VlXjG0N8Eg](https://poly.pizza/m/VlXjG0N8Eg) — "Zombie" by Quaternius | CC0 | Rigged + animated: `Idle`, `Idle_Attack`, `Walk`, `Run`, `Run_Arms`, `Run_Attack`, `Crawl`, `Jump`, `Jump_Idle`, `Jump_Land`, `Punch`, `HitReact`, `Death`, `Wave`, `Yes`, `No`. Richest zombie animation set — good primary zombie. |
 | `zombies/zombie-crawler.glb` | [poly.pizza/m/Htcsn9OrXJ](https://poly.pizza/m/Htcsn9OrXJ) — "Zombie half" by Quaternius | CC-BY | Legless/crawler variant. Rigged + animated: `Idle`, `Walk`, `Run`, `Crawl`, `Jump`, `Jump_Idle`, `Jump_Land`, `HitRecieve`, `Death`. **Requires attribution** — credit "Quaternius" — added to README credits. |
+| `zombies/scary_zombie.glb` | Adobe Mixamo — "Scary Zombie Pack" (`Ch10_nonPBR`) | [Mixamo royalty-free use](https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html) | Semi-realistic current zombie variant with high-resolution embedded textures and a 65-bone Mixamo rig. Consolidated clips: `Idle`, `Walk`, `Run`, `Attack`, `Death`, `NeckBite`, `Crawl`, `Bite`, `BiteAlt`, `DeathAlt`, `CrawlRun`, and `Scream`. |
+| `zombies/cop_zombie.glb` | Adobe Mixamo — "Copzombie L Actisdato" | [Mixamo royalty-free use](https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html) | Police zombie variant with a 67-bone Mixamo rig. The Scary Zombie Pack's 12 clips are retargeted by matching Mixamo bone names; the cop's two additional eye bones retain their rest pose. |
 
 ## Weapons
 
@@ -61,7 +68,9 @@ Static meshes only, no wheel rigging/suspension — fine for background dressing
 
 ## Animations
 
-No separate animation files — every character/zombie model in `assets/models/characters/` and `assets/models/zombies/` already has its animation clips baked into the same `.glb` (see the tables above for clip names). Godot imports these as an `AnimationPlayer`/`AnimationLibrary` on the model's scene automatically.
+Every runtime character/zombie model in `assets/models/characters/` and `assets/models/zombies/` has its animation clips baked into the same `.glb` (see the tables above for clip names). Godot imports these as an `AnimationPlayer`/`AnimationLibrary` on the model's scene automatically. The Mixamo player's individual FBX downloads are retained only as ignored source files; the game loads their consolidated `mixamo_soldier.glb`.
+
+**Not every third-person clip works in first person.** The game renders in true first person — the camera sits at the player's own head, so the body's animation *is* the first-person animation. Clips that read fine from outside can point the weapon well off the crosshair: "Rifle Idle" carries it across the chest, and "Reloading" travels 3.5m. `tools/probe_clip_poses.gd` scores a candidate clip on how squarely it holds the weapon down the view, and `tools/build_aim_idle.gd` shows how to pull a better one out of the raw Mixamo FBXs. Check a clip with the probe before wiring it into the player.
 
 If a future character model needs animations it doesn't ship with, Quaternius's CC0 "Universal Animation Library" packs (Unreal-Godot `.glb` variants, retargetable via Godot's bone-mapping) are the fallback — not currently pulled into the repo since it wasn't needed.
 

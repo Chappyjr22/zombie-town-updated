@@ -1,7 +1,9 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player/player.tscn" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/zombies/zombie.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/zombies/scary_zombie.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/zombies/cop_zombie.tscn" id="4"]
 
 [sub_resource type="BoxMesh" id="BoxMesh_ground"]
 size = Vector3(60, 1, 60)
@@ -47,8 +49,8 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
 [node name="Zombie1" parent="." instance=ExtResource("2")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 1, -8)
 
-[node name="Zombie2" parent="." instance=ExtResource("2")]
+[node name="ScaryZombie" parent="." instance=ExtResource("3")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6, 1, -10)
 
-[node name="Zombie3" parent="." instance=ExtResource("2")]
+[node name="CopZombie" parent="." instance=ExtResource("4")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -14)
