@@ -65,6 +65,7 @@ const CAMERA_PITCH_MAX := deg_to_rad(40.0)
 @onready var camera: Camera3D = $CameraRig/SpringArm3D/Camera3D
 @onready var anim_player: AnimationPlayer = NodeUtils.find_first_of_type(model, "AnimationPlayer")
 @onready var weapon_controller: WeaponController = $CameraRig/SpringArm3D/Camera3D/WeaponController
+@onready var hud: HUD = $HUD
 @onready var crosshair: Crosshair = $HUD/Crosshair
 
 var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
@@ -114,11 +115,13 @@ func _ready() -> void:
 	if weapon_controller:
 		weapon_controller.fired.connect(_on_weapon_fired)
 		weapon_controller.reload_started.connect(_on_reload_started)
-		weapon_controller.aim_changed.connect(crosshair.set_aiming)
-		crosshair.set_aiming(weapon_controller.is_aiming)
 		# Unconditional: without it the body holds nothing, so other players would
 		# see an unarmed soldier miming a rifle once multiplayer exists.
 		weapon_controller.attach_world_model(body_skeleton, &"mixamorig_RightHand")
+	# The HUD binds itself to both and owns every readout from there, so gameplay
+	# never has to know what's on screen.
+	hud.bind_player(self, weapon_controller)
+	health_changed.emit(health, max_health)
 
 
 ## Reapplied every frame because the AnimationTree rewrites the bone poses each
@@ -236,7 +239,7 @@ func take_damage(amount: float) -> void:
 	health_changed.emit(health, max_health)
 	if health <= 0.0:
 		is_dead = true
-		crosshair.visible = false
+		hud.visible = false
 		airborne_animation = &""
 		_play_full_body_animation([&"death"])
 		died.emit()
@@ -645,7 +648,7 @@ func _set_animation_tree_active(value: bool) -> void:
 
 
 func _on_weapon_fired() -> void:
-	crosshair.pulse()
+	# The crosshair pulse is the HUD's, connected to `fired` in bind_player.
 	if is_dead or animation_tree == null or not animation_tree.active:
 		return
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
