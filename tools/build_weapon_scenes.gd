@@ -37,7 +37,7 @@ func _initialize() -> void:
 func _build(weapon_name: String) -> void:
 	var scene_path := SCENE_DIR.path_join(weapon_name + ".tscn")
 	if ResourceLoader.exists(scene_path):
-		print("kept   ", scene_path, " (already exists)")
+		_add_missing_sockets(weapon_name, scene_path)
 		return
 
 	var model_path := MODEL_DIR.path_join(weapon_name + ".glb")
@@ -73,7 +73,12 @@ func _build(weapon_name: String) -> void:
 	var instanced := (load(model_path) as PackedScene).instantiate()
 	scene_root.add_child(instanced)
 	instanced.owner = scene_root
-	for socket in [{"name": "Grip", "at": grip}, {"name": "Foregrip", "at": foregrip}]:
+	var muzzle := Vector3(grip.x, foregrip.y, muzzle_z)
+	for socket in [
+		{"name": "Grip", "at": grip},
+		{"name": "Foregrip", "at": foregrip},
+		{"name": "Muzzle", "at": muzzle},
+	]:
 		var marker := Marker3D.new()
 		marker.name = socket.name
 		marker.position = socket.at
@@ -94,6 +99,55 @@ func _build(weapon_name: String) -> void:
 	)
 	model.queue_free()
 	root.remove_child(model)
+
+
+## Adds any socket a scene is missing, leaving every existing one untouched.
+##
+## Sockets get added over time - `Muzzle` arrived after the first pass - and the
+## ones already in a scene have been dragged into place by hand against the model.
+## Re-seeding those would throw that away, so this only fills gaps.
+func _add_missing_sockets(weapon_name: String, scene_path: String) -> void:
+	var scene_root := (load(scene_path) as PackedScene).instantiate() as Node3D
+	root.add_child(scene_root)
+	var grip := scene_root.get_node_or_null("Grip") as Node3D
+	var foregrip := scene_root.get_node_or_null("Foregrip") as Node3D
+	if grip == null or foregrip == null or scene_root.get_node_or_null("Muzzle") != null:
+		print("kept   ", scene_path, " (nothing to add)")
+		scene_root.queue_free()
+		root.remove_child(scene_root)
+		return
+
+	# Seeded on the model's own centre line, NOT on the line through the two hand
+	# sockets - those are wrist positions, offset below and to the side of the bore
+	# by the thickness of a hand, so a line through them is neither level nor
+	# straight down the weapon.
+	#
+	# The marker is rotated to face down the barrel, and that facing is what the
+	# controller reads as the barrel direction.
+	var bounds := _bounds_of(scene_root, "")
+	var muzzle_z: float = (
+		bounds.end.z
+		if absf(bounds.end.z - grip.position.z) > absf(bounds.position.z - grip.position.z)
+		else bounds.position.z
+	)
+	var muzzle := Marker3D.new()
+	muzzle.name = "Muzzle"
+	muzzle.transform = Transform3D(
+		Basis.looking_at(Vector3(0.0, 0.0, signf(muzzle_z - grip.position.z)), Vector3.UP),
+		Vector3(bounds.get_center().x, bounds.get_center().y, muzzle_z)
+	)
+	scene_root.add_child(muzzle)
+	muzzle.owner = scene_root
+
+	var packed := PackedScene.new()
+	packed.pack(scene_root)
+	var error := ResourceSaver.save(packed, scene_path)
+	if error != OK:
+		push_error("Could not update %s: %s" % [scene_path, error_string(error)])
+	else:
+		print("added  Muzzle to ", scene_path, " at ", muzzle.position.snapped(Vector3.ONE * 0.001))
+	scene_root.queue_free()
+	root.remove_child(scene_root)
 
 
 ## Bounds of the whole model, or of just the meshes whose name contains `filter`.

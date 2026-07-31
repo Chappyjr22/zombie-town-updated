@@ -7,7 +7,10 @@
 [node name="Root Scene" type="Node3D" parent="." unique_id=2066108550 instance=ExtResource("1_qiwwx")]
 
 [node name="Grip" type="Marker3D" parent="." unique_id=103210154]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0028077066, -0.06204347, -0.02141885)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.14564353, 0.35668665)
 
 [node name="Foregrip" type="Marker3D" parent="." unique_id=692209007]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0028077066, -0.02354347, 0.24059758)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.064308584, -0.023680363, -0.018223573)
+
+[node name="Muzzle" type="Marker3D" parent="." unique_id=1260733842]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.0028077066, -0.051657416, -0.31568864)

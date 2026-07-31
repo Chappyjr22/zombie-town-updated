@@ -54,6 +54,7 @@ var world_model_aligned := true
 var foregrip_in_mesh := Vector3.ZERO
 var sight_in_mesh := Vector3.ZERO
 var barrel_in_mesh := Vector3.FORWARD
+var muzzle_in_mesh := Vector3.ZERO
 ## Support arm chain on the body, resolved when the weapon is attached.
 var support_upper_index := -1
 var support_forearm_index := -1
@@ -182,9 +183,23 @@ func _fit_from_sockets(model: Node3D) -> bool:
 	var foregrip := model.get_node_or_null("Foregrip") as Node3D
 	if grip == null or foregrip == null:
 		return false
-	var along_barrel := foregrip.position - grip.position
+
+	# The barrel comes from the Muzzle marker's own facing - its -Z - not from a
+	# line between sockets.
+	#
+	# Grip and Foregrip mark where the *wrist bones* go, so both are deliberately
+	# offset from the weapon: the grip sits below the bore, and the foregrip is
+	# pushed out to the side by the thickness of a hand. Any line drawn between
+	# them therefore runs uphill and off to one side, and squaring that to
+	# horizontal tips the weapon down and yaws it - which is exactly what it did.
+	# A muzzle socket has no such problem because it is on the bore by definition.
+	var muzzle := model.get_node_or_null("Muzzle") as Node3D
+	var along_barrel := (
+		-muzzle.transform.basis.z if muzzle != null
+		else foregrip.position - grip.position
+	)
 	if along_barrel.length_squared() < 0.000001:
-		push_warning("%s has its Grip and Foregrip markers in the same place." % model.name)
+		push_warning("%s has its weapon sockets stacked on one another." % model.name)
 		return false
 
 	# Turn the weapon so the grip-to-foregrip line runs down -Z, then slide it so
@@ -199,6 +214,7 @@ func _fit_from_sockets(model: Node3D) -> bool:
 	)
 
 	foregrip_in_mesh = foregrip.position
+	muzzle_in_mesh = muzzle.position if muzzle != null else foregrip.position + along_barrel
 	sight_in_mesh = grip.position + along_barrel * 0.5 + Vector3.UP * 0.04
 	barrel_in_mesh = along_barrel.normalized()
 	# These models are authored at real-world scale, so nothing is resized.
@@ -557,7 +573,12 @@ func _hitscan() -> void:
 	if sighting and sighting.has("rid") and exclude.has(sighting.rid):
 		aim_point = camera_origin + camera_forward * current_weapon.weapon_range
 
-	var muzzle := world_model.global_position if world_model else camera_origin
+	# From the muzzle when the weapon declares one, so shots leave the barrel
+	# rather than the middle of the receiver.
+	var muzzle := (
+		world_model.global_transform * muzzle_in_mesh if world_model
+		else camera_origin
+	)
 	var query := PhysicsRayQueryParameters3D.create(muzzle, aim_point)
 	query.exclude = exclude
 	var result := space_state.intersect_ray(query)

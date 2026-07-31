@@ -11,3 +11,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.012861012, -0.055, 0.019111
 
 [node name="Foregrip" type="Marker3D" parent="." unique_id=432572460]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.012861012, -0.0165, -0.29621604)
+
+[node name="Muzzle" type="Marker3D" parent="." unique_id=436777900]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.012861012, 0.005570315, -0.6816161)
