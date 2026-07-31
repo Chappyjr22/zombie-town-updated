@@ -2,15 +2,12 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cs4gy6b1bwxb6"
+uid="uid://dwuhw636vtvux"
 path.s3tc="res://.godot/imported/zombie_Atlas.png-76327cdd8a0f0eaaca61104ba657ee37.s3tc.ctex"
 path.etc2="res://.godot/imported/zombie_Atlas.png-76327cdd8a0f0eaaca61104ba657ee37.etc2.ctex"
 metadata={
 "imported_formats": ["s3tc_bptc", "etc2_astc"],
 "vram_texture": true
-}
-generator_parameters={
-"md5": "3795851c85c1d7fbaf0b3b63054ec153"
 }
 
 [deps]

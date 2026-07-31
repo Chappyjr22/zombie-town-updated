@@ -57,6 +57,7 @@ var world_model_aligned := true
 ## closes, and where the sight line sits. Both are measured in _fit_to_grip.
 var foregrip_in_mesh := Vector3.ZERO
 var sight_in_mesh := Vector3.ZERO
+var barrel_in_mesh := Vector3.FORWARD
 ## Support arm chain on the body, resolved when the weapon is attached.
 var support_upper_index := -1
 var support_forearm_index := -1
@@ -221,6 +222,12 @@ func _fit_to_grip(model: Node3D) -> void:
 			held_bounds.get_center().z
 		) + current_weapon.sight_nudge
 	)
+	# The barrel, kept as a direction in mesh coordinates for the same reason as
+	# the sockets. Reading it off the model's local -Z at runtime does NOT work:
+	# _align_world_model post-multiplies a rotation, so -Z stops being the barrel
+	# the moment the weapon is turned into the hand. Measuring it here, before any
+	# of that, is what makes the aim correction in player.gd trustworthy.
+	barrel_in_mesh = (out_of_fit.basis * Vector3.FORWARD).normalized()
 
 
 ## Works out which way an arbitrarily-authored weapon model is facing from the
@@ -455,6 +462,16 @@ func _set_aiming(value: bool) -> void:
 
 func get_mouse_sensitivity_multiplier() -> float:
 	return ads_mouse_sensitivity_multiplier if is_aiming else 1.0
+
+
+## Which way the weapon is actually pointing, in world space.
+##
+## Derived from barrel_in_mesh rather than from the model's local -Z, which stops
+## being the barrel once _align_world_model has turned the weapon into the hand.
+func get_barrel_direction() -> Vector3:
+	if world_model == null:
+		return Vector3.ZERO
+	return (world_model.global_transform.basis * barrel_in_mesh).normalized()
 
 
 # --------------------------------------------------------------- weapon logic

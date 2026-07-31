@@ -14,7 +14,7 @@ Columns: Path · Source · License · Notes (poly count / rig / usage)
 | `animations/rifle_aim_idle.res` | Adobe Mixamo — "Rifle Aiming Idle", extracted by `tools/build_clips.gd` | [Mixamo royalty-free use](https://helpx.adobe.com/creative-cloud/faq/mixamo-faq.html) | Loaded over the soldier's `idle` at runtime by `scripts/player/player.gd`. The stock idle carries the rifle across the chest — a patrol carry rather than a soldier ready to fire. |
 | `animations/rifle_sprint.res` | Adobe Mixamo — "Sprint Forward", extracted by `tools/build_clips.gd` | same | Loaded as `sprint`. The consolidated model has **no sprint clip at all**, so sprinting previously played `run` and was indistinguishable from jogging. |
 
-Both are loose `Animation` resources rather than a rebuilt `.glb`, so the player model itself is never rewritten. Their track paths (`Skeleton3D:mixamorig_*`) already address the soldier's skeleton, so they drop straight on with no retargeting.
+Both are loose `Animation` resources rather than a rebuilt `.glb`, so the player model itself is never rewritten. Their track paths (`Skeleton3D:mixamorig_*`) already address the soldier's skeleton, so they drop straight on with no retargeting. The tool also **strips horizontal root motion** — Mixamo bakes 3.5m of forward travel into "Sprint Forward", which makes the model surge and snap back against a physics-driven body.
 
 The two legacy Quaternius skeletons are both named `CharacterArmature` internally but are **not** guaranteed bone-compatible (different node counts — 78 vs 85). The Mixamo player uses a different `mixamorig_` skeleton. Don't swap animations between these models without checking Godot's animation retargeting first.
 

@@ -33,9 +33,14 @@ const SPINE_PITCH_BONES: Array[StringName] = [
 	&"mixamorig_Spine2",
 ]
 
-## How far the camera can be pitched up and down. Tighter than a first-person
-## limit: swinging a third-person camera to vertical puts it inside the floor or
-## directly overhead, neither of which is usable.
+## Aim correction: how fast the torso eases into the measured error, and how far
+## it is allowed to twist. Both exist because the correction moves the weapon it
+## was measured from, so the loop needs damping and a ceiling.
+const AIM_YAW_CORRECTION_SPEED := 0.25
+const MAX_AIM_YAW := deg_to_rad(40.0)
+
+## How far the camera can be pitched. Tighter than a first-person limit: swinging
+## a third-person camera to vertical puts it inside the floor or directly overhead.
 const CAMERA_PITCH_MIN := deg_to_rad(-65.0)
 const CAMERA_PITCH_MAX := deg_to_rad(40.0)
 
@@ -71,6 +76,8 @@ var active_full_body_animation: StringName = &""
 var airborne_animation: StringName = &""
 var animation_tree: AnimationTree
 var body_skeleton: Skeleton3D
+## Yaw the torso is currently twisted by to bring the weapon onto the crosshair.
+var aim_yaw := 0.0
 var animation_blend_tree: AnimationNodeBlendTree
 var fire_animation_node: AnimationNodeAnimation
 var locomotion_blend := Vector2.ZERO
@@ -117,7 +124,7 @@ func _ready() -> void:
 ## Reapplied every frame because the AnimationTree rewrites the bone poses each
 ## time it runs - see the process_priority note in _ready.
 func _process(delta: float) -> void:
-	_apply_spine_pitch()
+	_apply_spine_aim()
 	_update_camera_distance(delta)
 
 
@@ -140,17 +147,35 @@ func _update_camera_distance(delta: float) -> void:
 ## because Mixamo's per-bone axes point in whatever direction they were authored,
 ## and spread over three joints so the character curves rather than hinging.
 ##
-## Pitch only. A matching yaw correction - measuring how far the barrel sits from
-## the view and turning the torso to close it - was tried and reverted: the
-## weapon's local -Z stops being the barrel once `_align_world_model()` has turned
-## it, so the error came out wrong and the correction chased it. See this folder's
-## CLAUDE.md before attempting it again.
-func _apply_spine_pitch() -> void:
+## Yaw closes the gap between where the weapon points and where the camera looks.
+## The weapon's direction comes from `_align_world_model()`, which lays it along
+## the line between the character's hands - so it swings off to one side as soon
+## as a movement clip changes that line. Shots are unaffected either way (they
+## trace from the camera), but a weapon visibly pointing somewhere else is worse
+## than a slightly overturned torso.
+func _apply_spine_aim() -> void:
 	if body_skeleton == null or is_dead:
 		return
-	var share := -spring_arm.rotation.x * spine_pitch_share / float(SPINE_PITCH_BONES.size())
-	if is_zero_approx(share):
+	var pitch_share := (
+		-spring_arm.rotation.x * spine_pitch_share / float(SPINE_PITCH_BONES.size())
+	)
+	# Unwound while sprinting rather than corrected. The sprint clip swings both
+	# arms, so the weapon follows a swinging hand and closing the gap would need
+	# about 70 degrees of twist - it just pins at the clamp and the character runs
+	# hunched. You aren't aiming mid-sprint anyway, so the torso is let go instead.
+	var target := 0.0 if sprint_blend > 0.5 else aim_yaw + _measure_aim_yaw_error()
+	# Eased, because the correction turns the weapon the error was measured from.
+	# Clamped, so a bad reading twists the torso a bounded amount rather than
+	# spinning it - which is exactly what happened the first time this was tried.
+	aim_yaw = clampf(
+		lerpf(aim_yaw, target, AIM_YAW_CORRECTION_SPEED),
+		-MAX_AIM_YAW,
+		MAX_AIM_YAW
+	)
+	var yaw_share := aim_yaw / float(SPINE_PITCH_BONES.size())
+	if is_zero_approx(pitch_share) and is_zero_approx(yaw_share):
 		return
+
 	for bone_name in SPINE_PITCH_BONES:
 		var bone_index := body_skeleton.find_bone(bone_name)
 		if bone_index < 0:
@@ -159,13 +184,33 @@ func _apply_spine_pitch() -> void:
 		var parent_basis := (
 			body_skeleton.get_bone_global_pose(parent).basis if parent >= 0 else Basis()
 		)
-		var posed := Basis(Vector3.RIGHT, share) * body_skeleton.get_bone_global_pose(
-			bone_index
-		).basis
+		var posed := (
+			Basis(Vector3.UP, yaw_share)
+			* Basis(Vector3.RIGHT, pitch_share)
+			* body_skeleton.get_bone_global_pose(bone_index).basis
+		)
 		body_skeleton.set_bone_pose_rotation(
 			bone_index,
 			(parent_basis.inverse() * posed).orthonormalized().get_rotation_quaternion()
 		)
+
+
+## Signed horizontal angle from where the weapon points to where the camera looks.
+##
+## The barrel comes from `WeaponController.get_barrel_direction()`, which measures
+## it off the weapon's own geometry. Taking the model's local -Z instead is what
+## sank the first attempt at this - that axis stops being the barrel once the
+## weapon has been turned into the hand.
+func _measure_aim_yaw_error() -> float:
+	if weapon_controller == null:
+		return 0.0
+	var barrel := weapon_controller.get_barrel_direction()
+	var view := -camera.global_transform.basis.z
+	barrel.y = 0.0
+	view.y = 0.0
+	if barrel.length_squared() < 0.0001 or view.length_squared() < 0.0001:
+		return 0.0
+	return barrel.normalized().signed_angle_to(view.normalized(), Vector3.UP)
 
 
 ## Installs the clips the soldier model doesn't ship with, or ships wrong. Any
@@ -196,9 +241,10 @@ func take_damage(amount: float) -> void:
 		_play_full_body_animation([&"death"])
 		died.emit()
 		# TODO: no death/respawn flow yet - player just stops taking further damage.
-	else:
-		airborne_animation = &""
-		_play_full_body_animation([&"hit"], 1.0, true)
+	# No hit reaction. The clip is a full-body flinch that interrupts whatever the
+	# player was doing - aiming, sprinting - and taking control away every time a
+	# zombie connects feels worse than showing nothing. Damage feedback belongs on
+	# the HUD instead.
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -293,7 +339,6 @@ func _update_animation(
 	if anim_player == null:
 		return
 	if active_full_body_animation in [
-		_find_animation([&"hit"]),
 		_find_animation([&"death"]),
 		_find_animation([&"jump_land"]),
 	]:
@@ -587,8 +632,6 @@ func _on_animation_finished(animation_name: StringName) -> void:
 	if animation_name == _find_animation([&"death"]):
 		return
 	active_full_body_animation = &""
-	if animation_name == _find_animation([&"hit"]) and not is_on_floor():
-		airborne_animation = &""
 	if is_on_floor():
 		_set_animation_tree_active(true)
 
