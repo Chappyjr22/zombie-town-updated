@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://cjd55tlli3a50"]
 
 [ext_resource type="Script" uid="uid://bj74pr6k18o26" path="res://scripts/weapons/weapon_data.gd" id="1"]
-[ext_resource type="PackedScene" uid="uid://vypdqfcpf4bg" path="res://scenes/weapons/ak47.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/ak47.tscn" id="2"]
 [ext_resource type="AudioStream" uid="uid://bgquwvpqya23a" path="res://assets/audio/weapons/fire-assault-rifle.mp3" id="3"]
 [ext_resource type="AudioStream" uid="uid://x1dd3u5bd162" path="res://assets/audio/weapons/reload-rifle.mp3" id="4"]
 

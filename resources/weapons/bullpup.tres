@@ -1,9 +1,9 @@
-[gd_resource type="Resource" load_steps=5 format=3]
+[gd_resource type="Resource" script_class="WeaponData" format=3 uid="uid://b3qu4c154wgk1"]
 
-[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
+[ext_resource type="Script" uid="uid://bj74pr6k18o26" path="res://scripts/weapons/weapon_data.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/weapons/grease-gun.tscn" id="2"]
-[ext_resource type="AudioStream" path="res://assets/audio/weapons/fire-assault-rifle.mp3" id="3"]
-[ext_resource type="AudioStream" path="res://assets/audio/weapons/reload-rifle.mp3" id="4"]
+[ext_resource type="AudioStream" uid="uid://bgquwvpqya23a" path="res://assets/audio/weapons/fire-assault-rifle.mp3" id="3"]
+[ext_resource type="AudioStream" uid="uid://x1dd3u5bd162" path="res://assets/audio/weapons/reload-rifle.mp3" id="4"]
 
 [resource]
 script = ExtResource("1")
@@ -13,8 +13,5 @@ fire_sound = ExtResource("3")
 reload_sound = ExtResource("4")
 damage = 26.0
 fire_rate = 10.0
-is_automatic = true
-mag_size = 30
-reload_time = 2.0
 weapon_range = 130.0
 starting_reserve_ammo = 120

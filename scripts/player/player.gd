@@ -13,16 +13,43 @@ const LOCOMOTION_BLEND_SPEED := 10.0
 const STANCE_BLEND_SPEED := 8.0
 
 ## Clips loaded over the soldier model's own at runtime, as loose Animation
-## resources so the model itself is never rewritten. See tools/build_clips.gd.
+## resources so the model itself is never rewritten. From Mixamo's Rifle 8-Way
+## Locomotion Pack; see tools/build_clips.gd.
 ##
-## - "idle": the stock one carries the rifle across the chest, which reads as a
-##   patrol rather than a soldier ready to fire.
-## - "sprint": the consolidated model has no sprint clip at all, so sprinting used
-##   to play "run" and looked identical to jogging.
-const EXTRA_CLIPS := {
-	&"idle": "res://assets/animations/rifle_aim_idle.res",
-	&"sprint": "res://assets/animations/rifle_sprint.res",
+## The model's stock locomotion is mostly empty-handed - measured, its strafes
+## carry the hands 0.04m above the hips against 0.43m for a weapon held ready, so
+## stepping sideways dropped the rifle to the character's waist. The pack is
+## rifle-held throughout and covers all eight directions per speed, which also
+## retires two workarounds: a sprint clip that had to be sourced separately
+## because the model shipped none, and a strafe that had to be mirrored because
+## Mixamo only sold one side.
+const RIFLE_CLIP_DIR := "res://assets/animations/rifle"
+
+## Speed tiers, slowest first, each with a full eight-way set.
+const LOCOMOTION_TIERS: Array[StringName] = [&"walk", &"run", &"sprint", &"walk_crouching"]
+
+## Direction suffix to its place on the blend square: X strafes, -Y is forward.
+## Diagonals sit on the unit circle rather than the corners so that holding two
+## keys moves the blend the same distance from centre as holding one.
+const LOCOMOTION_DIRECTIONS := {
+	&"forward": Vector2(0.0, -1.0),
+	&"forward_left": Vector2(-0.707, -0.707),
+	&"forward_right": Vector2(0.707, -0.707),
+	&"left": Vector2(-1.0, 0.0),
+	&"right": Vector2(1.0, 0.0),
+	&"backward": Vector2(0.0, 1.0),
+	&"backward_left": Vector2(-0.707, 0.707),
+	&"backward_right": Vector2(0.707, 0.707),
 }
+
+## Standing and crouching centres of the blend squares, plus the airborne set.
+const SINGLE_CLIPS: Array[StringName] = [
+	&"idle_aiming",
+	&"idle_crouching_aiming",
+	&"jump_up",
+	&"jump_loop",
+	&"jump_down",
+]
 
 ## Spine bones the look pitch is spread across, lowest first. Sharing it over
 ## three joints curves the torso the way a person actually leans, where putting it
@@ -219,17 +246,33 @@ func _measure_aim_yaw_error() -> float:
 ## Installs the clips the soldier model doesn't ship with, or ships wrong. Any
 ## that are missing are skipped rather than fatal - the model's own clips still
 ## work, they just read worse.
+## Loads the rifle pack over the model's own clips.
+##
+## Names are built from the tier and direction lists rather than read off disk:
+## exported builds turn loose `.res` files into `.remap`, so a directory scan
+## works in the editor and quietly finds nothing in a shipped game.
 func _install_extra_clips() -> void:
 	var library := anim_player.get_animation_library(&"")
-	for clip_name in EXTRA_CLIPS:
-		var path: String = EXTRA_CLIPS[clip_name]
+	var wanted: Array[StringName] = SINGLE_CLIPS.duplicate()
+	for tier in LOCOMOTION_TIERS:
+		for direction in LOCOMOTION_DIRECTIONS:
+			wanted.append(StringName("%s_%s" % [tier, direction]))
+
+	var missing := 0
+	for clip_name in wanted:
+		var path := RIFLE_CLIP_DIR.path_join("%s.res" % clip_name)
 		if not ResourceLoader.exists(path):
-			push_warning("%s is missing; run tools/build_clips.gd." % path)
+			missing += 1
 			continue
 		var existing := _find_animation([clip_name])
 		if existing != &"":
 			library.remove_animation(existing)
 		library.add_animation(clip_name, load(path))
+	if missing > 0:
+		push_warning(
+			"%d rifle clips are missing from %s; run tools/build_clips.gd."
+			% [missing, RIFLE_CLIP_DIR]
+		)
 
 
 func take_damage(amount: float) -> void:
@@ -343,18 +386,18 @@ func _update_animation(
 		return
 	if active_full_body_animation in [
 		_find_animation([&"death"]),
-		_find_animation([&"jump_land"]),
+		_find_animation([&"jump_down"]),
 	]:
 		return
 	if not is_on_floor():
-		var desired_air_animation := &"jump_start" if velocity.y > 0.0 else &"jump_air"
+		var desired_air_animation := &"jump_up" if velocity.y > 0.0 else &"jump_loop"
 		if desired_air_animation != airborne_animation:
 			airborne_animation = desired_air_animation
 			_play_full_body_animation([desired_air_animation])
 		return
 	if just_landed:
 		airborne_animation = &""
-		_play_full_body_animation([&"jump_land"])
+		_play_full_body_animation([&"jump_down"])
 		return
 	if active_full_body_animation != &"":
 		return
@@ -376,28 +419,16 @@ func _find_animation(names: Array) -> StringName:
 
 
 func _configure_animation_loops() -> void:
-	for requested_name in [
-		&"idle",
-		&"walk",
-		&"sprint",
-		&"run",
-		&"crouch_idle",
-		&"crouch_walk",
-		&"jump_air",
-		&"move_back",
-		&"strafe_left",
-		&"strafe_right",
-	]:
+	for requested_name in _looping_clip_names():
 		var loop_animation := _find_animation([requested_name])
 		if loop_animation != &"":
 			anim_player.get_animation(loop_animation).loop_mode = Animation.LOOP_LINEAR
 	for requested_name in [
-		&"jump_start",
-		&"jump_land",
+		&"jump_up",
+		&"jump_down",
 		&"fire",
 		&"fire_move",
 		&"reload",
-		&"hit",
 		&"death",
 	]:
 		var one_shot_animation := _find_animation([requested_name])
@@ -406,19 +437,7 @@ func _configure_animation_loops() -> void:
 
 
 func _setup_animation_tree() -> void:
-	if not _has_animations([
-		&"idle",
-		&"run",
-		&"sprint",
-		&"move_back",
-		&"strafe_left",
-		&"strafe_right",
-		&"crouch_idle",
-		&"crouch_walk",
-		&"fire",
-		&"fire_move",
-		&"reload",
-	]):
+	if not _has_locomotion_clips():
 		push_warning("Player AnimationTree was not created because directional clips are missing.")
 		return
 
@@ -427,9 +446,15 @@ func _setup_animation_tree() -> void:
 	# clip installed over the top by _install_extra_clips. The model ships no
 	# sprint of its own, which is why holding shift used to look identical to
 	# moving normally.
-	var walk_space := _create_directional_blend_space(&"run")
-	var run_space := _create_directional_blend_space(&"sprint")
-	var crouch_space := _create_crouch_blend_space()
+	# Moving normally is a jog, so the "run" tier is the default gait and "sprint"
+	# is what holding shift blends toward. The pack's "walk" tier is slower than
+	# anything the player currently moves at and is left unused for now.
+	var walk_space := _create_directional_blend_space(&"run", &"idle_aiming")
+	var run_space := _create_directional_blend_space(&"sprint", &"idle_aiming")
+	var crouch_space := _create_directional_blend_space(
+		&"walk_crouching",
+		&"idle_crouching_aiming"
+	)
 	var run_blend := AnimationNodeBlend2.new()
 	var stance_node := AnimationNodeBlend2.new()
 	fire_animation_node = _create_animation_node(&"fire")
@@ -474,68 +499,37 @@ func _setup_animation_tree() -> void:
 	animation_tree.active = true
 
 
-func _create_directional_blend_space(forward_animation: StringName) -> AnimationNodeBlendSpace2D:
-	var blend_space := AnimationNodeBlendSpace2D.new()
-	# Sprint strides faster than a jog, so the shared directional clips get
-	# stretched to whichever cadence this tier runs at.
-	var cycle_length := 0.6 if forward_animation == &"sprint" else 0.85
-	blend_space.min_space = Vector2(-1.0, -1.0)
-	blend_space.max_space = Vector2(1.0, 1.0)
-	blend_space.x_label = "Strafe"
-	blend_space.y_label = "Forward / Back"
-	blend_space.sync_mode = AnimationNodeBlendSpace2D.SYNC_MODE_INDEPENDENT
-	blend_space.add_blend_point(_create_animation_node(&"idle"), Vector2.ZERO, -1, &"idle")
-	blend_space.add_blend_point(
-		_create_animation_node(forward_animation, cycle_length),
-		Vector2(0.0, -1.0),
-		-1,
-		&"forward"
-	)
-	blend_space.add_blend_point(
-		_create_animation_node(&"move_back", cycle_length),
-		Vector2(0.0, 1.0),
-		-1,
-		&"back"
-	)
-	blend_space.add_blend_point(
-		_create_animation_node(&"strafe_left", cycle_length),
-		Vector2(-1.0, 0.0),
-		-1,
-		&"left"
-	)
-	blend_space.add_blend_point(
-		_create_animation_node(&"strafe_right", cycle_length),
-		Vector2(1.0, 0.0),
-		-1,
-		&"right"
-	)
-	return blend_space
-
-
-func _create_crouch_blend_space() -> AnimationNodeBlendSpace2D:
+## A nine-point blend square for one speed tier: a dedicated clip per direction
+## plus the idle at the centre.
+##
+## The pack ships a real clip for each of the eight directions, including the
+## diagonals, so nothing here is interpolated between neighbours or reused across
+## sides. Every clip is authored with the rifle held, which is the whole point -
+## the model's own strafes are empty-handed and dropped the weapon to the hips.
+func _create_directional_blend_space(
+	tier: StringName,
+	idle_animation: StringName
+) -> AnimationNodeBlendSpace2D:
 	var blend_space := AnimationNodeBlendSpace2D.new()
 	blend_space.min_space = Vector2(-1.0, -1.0)
 	blend_space.max_space = Vector2(1.0, 1.0)
 	blend_space.x_label = "Strafe"
 	blend_space.y_label = "Forward / Back"
+	# Independent, because the eight clips are separate captures with their own
+	# stride timings - syncing them to a shared phase makes the feet skate.
 	blend_space.sync_mode = AnimationNodeBlendSpace2D.SYNC_MODE_INDEPENDENT
 	blend_space.add_blend_point(
-		_create_animation_node(&"crouch_idle"),
+		_create_animation_node(idle_animation),
 		Vector2.ZERO,
 		-1,
 		&"idle"
 	)
-	for point in [
-		{"name": &"forward", "position": Vector2(0.0, -1.0)},
-		{"name": &"back", "position": Vector2(0.0, 1.0)},
-		{"name": &"left", "position": Vector2(-1.0, 0.0)},
-		{"name": &"right", "position": Vector2(1.0, 0.0)},
-	]:
+	for direction in LOCOMOTION_DIRECTIONS:
 		blend_space.add_blend_point(
-			_create_animation_node(&"crouch_walk", 1.15),
-			point.position,
+			_create_animation_node(StringName("%s_%s" % [tier, direction])),
+			LOCOMOTION_DIRECTIONS[direction],
 			-1,
-			point.name
+			direction
 		)
 	return blend_space
 
@@ -572,6 +566,26 @@ func _is_upper_body_track(track_path: NodePath) -> bool:
 		if bone_name.contains(lower_body_token):
 			return false
 	return bone_name.begins_with("mixamorig_")
+
+
+## Every clip the blend tree drives, so the guard checks what it actually builds
+## rather than a hand-kept list that drifts out of date whenever a tier changes.
+func _has_locomotion_clips() -> bool:
+	var required: Array[StringName] = [&"fire", &"fire_move", &"reload"]
+	required.append_array(SINGLE_CLIPS)
+	for tier in [&"run", &"sprint", &"walk_crouching"]:
+		for direction in LOCOMOTION_DIRECTIONS:
+			required.append(StringName("%s_%s" % [tier, direction]))
+	return _has_animations(required)
+
+
+## Locomotion loops; one-shots are listed separately in _configure_animation_loops.
+func _looping_clip_names() -> Array[StringName]:
+	var names: Array[StringName] = [&"idle_aiming", &"idle_crouching_aiming", &"jump_loop"]
+	for tier in LOCOMOTION_TIERS:
+		for direction in LOCOMOTION_DIRECTIONS:
+			names.append(StringName("%s_%s" % [tier, direction]))
+	return names
 
 
 func _has_animations(animation_names: Array) -> bool:
