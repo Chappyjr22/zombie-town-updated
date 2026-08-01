@@ -16,10 +16,19 @@ Thumbs.db
 .vscode/
 *.tmp
 
-# Local Mixamo download/extraction duplicates. The curated source FBXs under
-# assets/models/characters/mixamo_soldier/ remain tracked.
+# Raw Mixamo source downloads. NEVER commit these.
+#
+# Every Mixamo FBX bundles the whole character mesh, so each one is ~136MB and
+# the set is 7.8GB. They were tracked in plain git until their history was
+# stripped, which is why this repo's .git was 13GB and why pushing was
+# impossible - GitHub hard-rejects any non-LFS file over 100MB.
+#
+# Nothing needs them at runtime. They are source material, already converted
+# into assets/animations/*.res and mixamo_soldier.glb by tools/build_clips.gd.
+# Keep them locally if you want to rebuild clips; keep them out of the repo.
 /mixamo_soldier/
 /assets/models/characters/mixamo_soldier.zip
+/assets/models/characters/mixamo_soldier/**/*.fbx
 /assets/models/characters/mixamo_soldier/mixamo_soldier/
 
 # Debug renders written by tools/render_*.gd for eyeballing the viewmodel.
