@@ -3,20 +3,23 @@
 [ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/weapons/makarov.tscn" id="2"]
 [ext_resource type="AudioStream" path="res://assets/audio/weapons/fire-pistol.mp3" id="3"]
-[ext_resource type="AudioStream" path="res://assets/audio/weapons/weapon-pistol-reload.ogg" id="4"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/reload-pistol.mp3" id="4"]
 
 [resource]
 script = ExtResource("1")
-display_name = "Makarov"
+display_name = "Ray Gun"
 model_scene = ExtResource("2")
 fire_sound = ExtResource("3")
 reload_sound = ExtResource("4")
-damage = 22.0
-fire_rate = 4.0
+damage = 900.0
+fire_rate = 4.17
 is_automatic = false
-mag_size = 12
-reload_time = 1.6
-weapon_range = 60.0
-starting_reserve_ammo = 84
+mag_size = 20
+reload_time = 2.4
+weapon_range = 120.0
+starting_reserve_ammo = 160
+splash_damage = 425.0
+splash_radius = 4.2
 locomotion_set = &"pistol"
 uses_support_hand = false
+tint_color = Color(0.4, 1.0, 0.55, 0.4)

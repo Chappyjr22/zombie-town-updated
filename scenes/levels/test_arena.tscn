@@ -2,7 +2,7 @@
 
 [ext_resource type="PackedScene" uid="uid://cavx0sbef5hsh" path="res://scenes/player/player.tscn" id="1"]
 [ext_resource type="Script" path="res://scripts/ai/round_director.gd" id="2"]
-[ext_resource type="PackedScene" path="res://scenes/zombies/zombie.tscn" id="3"]
+[ext_resource type="Script" path="res://scenes/levels/test_arena.gd" id="3"]
 [ext_resource type="PackedScene" path="res://scenes/zombies/scary_zombie.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://scenes/zombies/cop_zombie.tscn" id="5"]
 
@@ -25,6 +25,7 @@ albedo_color = Color(0.28, 0.32, 0.26, 1)
 size = Vector3(60, 1, 60)
 
 [node name="TestArena" type="Node3D" unique_id=975967487]
+script = ExtResource("3")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=1873348202]
 transform = Transform3D(0.8137977, -0.4545195, 0.3599965, 0, 0.6209836, 0.7838292, -0.5811541, -0.6377914, 0.5052046, 0, 8, 0)
@@ -46,10 +47,15 @@ shape = SubResource("BoxShape3D_ground")
 
 [node name="Player" parent="." unique_id=1335210611 instance=ExtResource("1")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+pause_enabled = false
+
+[node name="TestZombie" parent="." instance=ExtResource("4")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -8)
 
 [node name="RoundDirector" type="Node3D" parent="."]
 script = ExtResource("2")
-zombie_scenes = [ExtResource("3"), ExtResource("4"), ExtResource("5")]
+zombie_scenes = [ExtResource("4"), ExtResource("5")]
+autostart = false
 
 [node name="Spawn1" type="Marker3D" parent="RoundDirector"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -24, 0, -24)

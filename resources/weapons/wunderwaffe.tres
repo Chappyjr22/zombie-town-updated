@@ -3,18 +3,21 @@
 [ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/weapons/sniper.tscn" id="2"]
 [ext_resource type="AudioStream" path="res://assets/audio/weapons/fire-sniper-rifle.mp3" id="3"]
-[ext_resource type="AudioStream" path="res://assets/audio/weapons/weapon-smg-reload.ogg" id="4"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/reload-rifle.mp3" id="4"]
 
 [resource]
 script = ExtResource("1")
-display_name = "Sniper Rifle"
+display_name = "Wunderwaffe DG-2"
 model_scene = ExtResource("2")
 fire_sound = ExtResource("3")
 reload_sound = ExtResource("4")
-damage = 95.0
-fire_rate = 1.1
+damage = 480.0
+fire_rate = 1.17
 is_automatic = false
-mag_size = 5
+mag_size = 3
 reload_time = 3.0
-weapon_range = 300.0
-starting_reserve_ammo = 30
+weapon_range = 60.0
+starting_reserve_ammo = 15
+chain_count = 5
+chain_radius = 9.0
+tint_color = Color(0.55, 0.6, 1.0, 0.4)

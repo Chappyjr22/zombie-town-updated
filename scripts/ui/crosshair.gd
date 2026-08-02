@@ -16,6 +16,14 @@ var movement_amount := 0.0
 var recoil_amount := 0.0
 var displayed_gap := hip_gap
 var is_aiming := false
+## True first person - see Player.toggle_perspective(). Aiming in first
+## person lines the camera up with the weapon's own sight
+## (WeaponController._update_ads_sight_alignment()), so a screen-centre
+## reticle drawn on top of it would be redundant at best and visibly
+## misaligned with the actual sight picture at worst - hidden rather than
+## drawn alongside it. Third-person ADS still has nothing else to aim by, so
+## it keeps the reticle.
+var is_first_person := false
 
 
 func _ready() -> void:
@@ -39,11 +47,17 @@ func set_aiming(value: bool) -> void:
 	is_aiming = value
 
 
+func set_first_person(value: bool) -> void:
+	is_first_person = value
+
+
 func pulse() -> void:
 	recoil_amount = maxf(recoil_amount, recoil_expansion)
 
 
 func _draw() -> void:
+	if is_aiming and is_first_person:
+		return
 	var center := size * 0.5
 	var segments := [
 		[

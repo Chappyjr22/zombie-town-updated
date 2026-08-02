@@ -1,22 +1,24 @@
 [gd_resource type="Resource" load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
-[ext_resource type="PackedScene" path="res://scenes/weapons/makarov.tscn" id="2"]
-[ext_resource type="AudioStream" path="res://assets/audio/weapons/fire-pistol.mp3" id="3"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/flare-gun.tscn" id="2"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/fire-revolver.mp3" id="3"]
 [ext_resource type="AudioStream" path="res://assets/audio/weapons/weapon-pistol-reload.ogg" id="4"]
 
 [resource]
 script = ExtResource("1")
-display_name = "Makarov"
+display_name = "Flare Gun"
 model_scene = ExtResource("2")
 fire_sound = ExtResource("3")
 reload_sound = ExtResource("4")
-damage = 22.0
-fire_rate = 4.0
+damage = 40.0
+fire_rate = 0.92
 is_automatic = false
-mag_size = 12
-reload_time = 1.6
-weapon_range = 60.0
-starting_reserve_ammo = 84
+mag_size = 1
+reload_time = 2.2
+weapon_range = 50.0
+starting_reserve_ammo = 20
+splash_damage = 190.0
+splash_radius = 4.0
 locomotion_set = &"pistol"
 uses_support_hand = false

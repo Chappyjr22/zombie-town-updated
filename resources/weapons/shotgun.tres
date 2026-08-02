@@ -3,7 +3,7 @@
 [ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/weapons/shotgun.tscn" id="2"]
 [ext_resource type="AudioStream" path="res://assets/audio/weapons/fire-shotgun.mp3" id="3"]
-[ext_resource type="AudioStream" path="res://assets/audio/weapons/reload-shotgun.mp3" id="4"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/weapon-smg-reload.ogg" id="4"]
 
 [resource]
 script = ExtResource("1")
@@ -18,3 +18,5 @@ mag_size = 6
 reload_time = 3.2
 weapon_range = 25.0
 starting_reserve_ammo = 32
+pellet_count = 8
+pellet_spread_degrees = 3.5

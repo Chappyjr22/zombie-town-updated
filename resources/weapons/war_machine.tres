@@ -1,0 +1,23 @@
+[gd_resource type="Resource" load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
+[ext_resource type="PackedScene" path="res://scenes/weapons/grease-gun.tscn" id="2"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/fire-assault-rifle-2.mp3" id="3"]
+[ext_resource type="AudioStream" path="res://assets/audio/weapons/reload-lmg.mp3" id="4"]
+
+[resource]
+script = ExtResource("1")
+display_name = "War Machine"
+model_scene = ExtResource("2")
+fire_sound = ExtResource("3")
+reload_sound = ExtResource("4")
+damage = 1.0
+fire_rate = 2.33
+is_automatic = false
+mag_size = 6
+reload_time = 3.6
+weapon_range = 60.0
+starting_reserve_ammo = 24
+splash_damage = 420.0
+splash_radius = 5.2
+tint_color = Color(1.0, 0.35, 0.3, 0.4)

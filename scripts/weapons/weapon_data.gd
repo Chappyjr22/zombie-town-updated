@@ -12,6 +12,57 @@ class_name WeaponData
 @export var reload_time: float = 2.0
 @export var weapon_range: float = 120.0 ## named weapon_range, not range - that shadows GDScript's built-in range()
 @export var starting_reserve_ammo: int = 90
+## How many separate rays one trigger pull fires. 1 for every hitscan weapon
+## except a shotgun - damage above is the total if every pellet connects, split
+## evenly across pellet_count rather than being per-pellet on its own, so
+## Pack-a-Punch and Double Tap keep multiplying one number regardless of how
+## many rays it's spread across.
+@export var pellet_count: int = 1
+## Half-angle in degrees of the cone pellets scatter within. 0 keeps every
+## pellet on the same line as pellet_count 1 would anyway; only meaningful once
+## pellet_count > 1.
+@export var pellet_spread_degrees: float = 0.0
+@export_group("Wonder weapon")
+## 0 disables splash entirely - every current wall-buy weapon. Set together
+## on the mystery-box exclusives that had it in the source data (Ray Gun/Ray
+## Gun Mark II/War Machine) to damage everything else within splash_radius of
+## the hit, tapering linearly to zero at the edge rather than applying in
+## full throughout it. splash_damage is independent of `damage` above, not a
+## fraction of it - the source data gives each its own number (War Machine is
+## 0 direct damage, 420 splash: every kill is the splash, never the direct
+## hit), so this does too.
+@export var splash_damage: float = 0.0
+@export var splash_radius: float = 0.0
+## How many extra zombies a hit arcs to beyond the one actually struck, each
+## within chain_radius of the previous target and each other - Wunderwaffe
+## DG-2's signature. 0 means a hit never chains (every weapon but that one).
+@export var chain_count: int = 0
+@export var chain_radius: float = 9.0
+## How many extra zombies one pellet can hit *beyond* the first, continuing
+## in a straight line past whoever it just hit. 0 (every current weapon)
+## stops the ray at the first hit, same as before this existed.
+@export var penetration_count: int = 0
+## Non-zero turns this into a cone weapon instead of a hitscan ray - the
+## Thundergun. It deals cone_kill_damage (flat, no falloff) to every zombie
+## within cone_kill_range and within half-angle cone_kill_angle_degrees of
+## the barrel, instead of tracing a ray at all. The original had 0 direct
+## damage and killed purely through a knockback impulse this project's
+## ragdoll can't currently express (canned death animation only - see
+## scripts/ai/CLAUDE.md's ragdoll history) - a large flat damage number
+## reproduces "anything this close in front of you dies" without needing
+## working ragdoll physics to sell the knockback itself.
+@export var cone_kill_range: float = 0.0
+@export var cone_kill_angle_degrees: float = 30.0
+@export var cone_kill_damage: float = 100000.0
+## Tints the equipped world model - see WeaponController._apply_weapon_tint().
+## A placeholder differentiator, not a real reskin: none of the five box
+## weapons has its own model yet, so each currently reuses an existing
+## wall-buy weapon's mesh (see mystery_box.gd's own comment) and needs
+## *something* to read as "not that gun" at a glance until real models exist.
+## (1,1,1,0) (fully transparent) means "no tint, don't add the overlay pass
+## at all" - every existing weapon's default.
+@export var tint_color: Color = Color(1.0, 1.0, 1.0, 0.0)
+
 ## Which body locomotion set the character carries this weapon with - see
 ## LocomotionSets. A rifle is held in two hands across the chest and a handgun in
 ## one at the waist, so the whole run/strafe set differs, not just the arms.
