@@ -9,6 +9,8 @@ height = 2.05
 
 [node name="CopZombie" type="CharacterBody3D"]
 script = ExtResource("1")
+hitbox_size = Vector3(2.3, 2.15, 0.65)
+hitbox_center = Vector3(0, 0.88, 0)
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="."]
 position = Vector3(0, 1.025, 0)

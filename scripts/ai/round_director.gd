@@ -65,6 +65,24 @@ const DAMAGE_PER_ROUND := 0.7
 ## round queues up behind it.
 const MAX_ALIVE := 30
 
+## Chance a spawned zombie is a shambling walker instead of a runner, so early
+## rounds read as a slow, manageable shamble and later rounds read as an
+## actual sprint - a mix, not every zombie flipping from walk to run on the
+## same round. Flat at 100% through round WALK_CHANCE_FLAT_ROUNDS (the very
+## first rounds are walkers only, full stop), then a straight-line ramp down
+## to WALK_CHANCE_MIN, timed to land exactly on WALK_CHANCE_FLOOR_ROUND - not
+## a fast early drop-off, since a round-20 game where a third of zombies
+## still amble over would be a much easier fight than the health/speed/damage
+## curves above are assuming.
+const WALK_CHANCE_BASE := 1.0
+const WALK_CHANCE_MIN := 0.05
+const WALK_CHANCE_FLAT_ROUNDS := 3
+const WALK_CHANCE_FLOOR_ROUND := 10
+## A walker's own move_speed is this fraction of what speed_for_round() would
+## otherwise give it - walking at a runner's pace would slide the feet across
+## the ground instead of actually stepping.
+const WALK_SPEED_FRACTION := 0.55
+
 ## Gap between spawns, randomised so they trickle in rather than arriving in
 ## lockstep. Re-checked on this interval while the population is capped.
 const SPAWN_INTERVAL := Vector2(0.7, 1.6)
@@ -129,7 +147,10 @@ func _ready() -> void:
 	if autostart:
 		# A beat before the first round so the player isn't fighting during the
 		# level's first frames, while the navmesh and models are still settling.
-		get_tree().create_timer(autostart_delay).timeout.connect(start_round)
+		# process_always=false so this respects a pause - SceneTreeTimer defaults
+		# to counting through one, which would spawn a round on schedule under a
+		# paused menu instead of waiting for the player to actually resume.
+		get_tree().create_timer(autostart_delay, false).timeout.connect(start_round)
 
 
 func _process(delta: float) -> void:
@@ -183,6 +204,14 @@ func speed_for_round(round_number: int) -> float:
 	return base * _rng.randf_range(SPEED_VARIANCE.x, SPEED_VARIANCE.y)
 
 
+static func walk_chance_for_round(round_number: int) -> float:
+	if round_number <= WALK_CHANCE_FLAT_ROUNDS:
+		return WALK_CHANCE_BASE
+	var ramp_rounds := WALK_CHANCE_FLOOR_ROUND - WALK_CHANCE_FLAT_ROUNDS
+	var t := float(round_number - WALK_CHANCE_FLAT_ROUNDS) / float(ramp_rounds)
+	return lerpf(WALK_CHANCE_BASE, WALK_CHANCE_MIN, clampf(t, 0.0, 1.0))
+
+
 func alive_count() -> int:
 	var alive := 0
 	for zombie in get_tree().get_nodes_in_group("zombies"):
@@ -230,6 +259,11 @@ func _spawn_one() -> void:
 	zombie.max_health = health_for_round(current_round)
 	zombie.move_speed = speed_for_round(current_round)
 	zombie.attack_damage = damage_for_round(current_round)
+	# A mix of walkers and runners rather than every zombie on the same gait -
+	# see walk_chance_for_round()/WALK_SPEED_FRACTION's own comments.
+	if _rng.randf() < walk_chance_for_round(current_round):
+		zombie.gait = &"Walk"
+		zombie.move_speed *= WALK_SPEED_FRACTION
 
 	var origin := _pick_spawn_point()
 	zombie.died.connect(_on_zombie_died)
@@ -307,13 +341,39 @@ func _collect_spawn_points() -> void:
 		)
 
 
-func _on_zombie_died(_zombie: Zombie) -> void:
+func _on_zombie_died(zombie: Zombie) -> void:
 	kills += 1
+	_maybe_drop_power_up(zombie.global_position)
 	_emit_population()
 	# Deferred: the zombie that just died is still in the "zombies" group for the
 	# rest of this frame, so counting now would report one too many alive and the
 	# round would never read as cleared.
 	_check_round_cleared.call_deferred()
+
+
+## Ported from zombie-town-online's maybeDrop(): a small random chance per
+## kill, but a *guaranteed* drop every POWER_UP_GUARANTEED_EVERY kills so a
+## long unlucky streak can't leave a run completely without one. kills is
+## already incremented by the time this runs, matching the source's own
+## `game.kills++` before `maybeDrop()`.
+const POWER_UP_DROP_CHANCE := 0.028
+const POWER_UP_GUARANTEED_EVERY := 60
+const POWER_UP_KINDS: Array[StringName] = [
+	&"maxammo", &"instakill", &"doublepoints", &"nuke", &"firesale"
+]
+
+
+func _maybe_drop_power_up(at: Vector3) -> void:
+	var guaranteed := kills % POWER_UP_GUARANTEED_EVERY == 0
+	if not guaranteed and _rng.randf() > POWER_UP_DROP_CHANCE:
+		return
+	var drop := PowerUpDrop.new()
+	drop.kind = POWER_UP_KINDS[_rng.randi() % POWER_UP_KINDS.size()]
+	# Local position, set before add_child() - not after. See _spawn_one()'s
+	# own comment above for why: a body placed after entering the tree exists
+	# at its parent's origin for a frame first.
+	drop.position = to_local(at)
+	add_child(drop)
 
 
 func _check_round_cleared() -> void:

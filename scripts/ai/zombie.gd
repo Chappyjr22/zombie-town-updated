@@ -8,13 +8,23 @@ enum State { IDLE, CHASE, ATTACK, DEAD }
 @export var attack_range: float = 1.6
 @export var attack_damage: float = 15.0
 @export var attack_cooldown: float = 1.2
-@export var detection_range: float = 25.0
+## No stealth mechanic exists anywhere in this game - a zombie spawned into a
+## round should always know where the player is and start closing the
+## distance immediately. Bug found by testing: the old default (25.0) was
+## smaller than the distance from every spawn marker on both levels to the
+## player's own start position (test_arena's closest spawn is ~29m out,
+## town.tscn's spawns run up to ~57m), so every zombie sat frozen in IDLE from
+## the moment it spawned until the player happened to close that gap - looked
+## exactly like "zombies aren't pathing" but was really "zombies can't even
+## see the player yet." Set high enough to be effectively unlimited for
+## either level rather than tuned to a specific map size.
+@export var detection_range: float = 1000.0
 @export var corpse_lifetime: float = 20.0 ## seconds a ragdolled corpse stays before queue_free(). Set to 0 to keep forever.
 ## Playtest showed zombies chasing with their backs to the player - the model's
 ## authored front doesn't match the -Z forward that look_at() (used for facing
 ## the player) assumes. 180 is a first guess since it looked like an exact
 ## backward mismatch, not an arbitrary angle; if it's still wrong, select the
-## Model node under this zombie in zombie.tscn and adjust its Y rotation in
+## Model node under this zombie scene and adjust its Y rotation in
 ## the Inspector directly.
 @export var model_yaw_offset_degrees := 180.0
 
@@ -22,9 +32,19 @@ enum State { IDLE, CHASE, ATTACK, DEAD }
 ## against the head bone's origin, which sits at the base of the skull, so this
 ## covers the head and not much neck.
 const HEADSHOT_RADIUS := 0.28
-## Head bone names across the rigs in use. Mixamo prefixes with `mixamorig_`; the
-## legacy Quaternius model just calls it Head.
-const HEAD_BONE_NAMES := ["mixamorig_Head", "Head", "head"]
+## Both remaining rigs (scary_zombie, cop_zombie) are Mixamo and use this name.
+const HEAD_BONE_NAMES := ["mixamorig_Head"]
+
+## Wider than the movement capsule ($CollisionShape3D, kept tight so crowds of
+## zombies don't shove each other around even harder - see "Zombies shove the
+## player" in scripts/ai/CLAUDE.md). A zombie's outstretched arms reach well
+## past that capsule, so shots landing on them need a separate, more generous
+## target to land on at all; classify_hit() still scores head vs. body off the
+## live head bone regardless of which hitbox the shot actually landed on.
+## Default is a reasonable average - each scene overrides it to fit its own
+## model's measured silhouette (see PhysicsLayers.HITBOX's own comment).
+@export var hitbox_size: Vector3 = Vector3(2.0, 1.9, 0.6)
+@export var hitbox_center: Vector3 = Vector3(0, 0.8, 0)
 
 var health: float
 var state: State = State.IDLE
@@ -34,6 +54,12 @@ var locked_animation: StringName = &""
 var attack_animation_index := 0
 var navigation_agent: NavigationAgent3D
 var _head_bone_index := -1
+## Set by RoundDirector before add_child() - see _spawn_one()'s own comment on
+## why things get set before entering the tree, not after. Defaults to Run so
+## a hand-placed zombie (test_arena.tscn, or anything not spawned through the
+## round loop) behaves exactly as it always has.
+var gait: StringName = &"Run"
+var hitbox_area: Area3D
 
 ## Emitted once, when this zombie dies. `RoundDirector` counts rounds off this,
 ## so it must fire exactly once - `die()` is guarded by the DEAD state.
@@ -71,6 +97,7 @@ func _ready() -> void:
 		physical_bone_simulator.physical_bones_stop_simulation()
 	model.rotation_degrees.y = model_yaw_offset_degrees
 	if anim_player:
+		_install_run_override()
 		_configure_animation_loops()
 		anim_player.animation_finished.connect(_on_animation_finished)
 	if skeleton:
@@ -79,10 +106,53 @@ func _ready() -> void:
 			if _head_bone_index >= 0:
 				break
 	_setup_navigation()
+	_setup_hitbox()
 
 
-## Adds the pathfinding agent in code rather than to each of the three zombie
-## scenes, so the variants can't drift apart on it.
+## Optional: assets/animations/zombies/run.res, if present, replaces the
+## model's own baked-in Run clip. Built with the same FBX->res pipeline as
+## the player's locomotion packs (tools/build_clips.gd, just pointed at a
+## "zombies" output folder instead of a player locomotion set) - the track
+## paths address bones by name ("Skeleton3D:mixamorig_*"), which both this
+## rig and the player's share, so nothing about the extraction needed to
+## change for a different skeleton. Installed under the exact name "Run" so
+## _find_animation()'s exact-match check picks it over the model's own
+## differently-prefixed baked-in clip (e.g. "Armature|Run") without every
+## _play_anim([.... &"Run" ....]) call site needing to know it exists.
+## Purely additive - nothing here changes if the file doesn't exist.
+const RUN_OVERRIDE_PATH := "res://assets/animations/zombies/run.res"
+
+
+func _install_run_override() -> void:
+	if not ResourceLoader.exists(RUN_OVERRIDE_PATH):
+		return
+	var library := anim_player.get_animation_library(&"")
+	if library.has_animation(&"Run"):
+		library.remove_animation(&"Run")
+	library.add_animation(&"Run", load(RUN_OVERRIDE_PATH))
+
+
+## A wider, hitscan-only Area3D on the HITBOX layer - see this var's own doc
+## comment and PhysicsLayers.HITBOX for why the movement capsule alone isn't
+## enough. collision_mask is 0: this only needs to be found BY a raycast, it
+## never needs to detect anything itself.
+func _setup_hitbox() -> void:
+	var area := Area3D.new()
+	area.name = "HitboxArea"
+	area.collision_layer = PhysicsLayers.HITBOX
+	area.collision_mask = 0
+	add_child(area)
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = hitbox_size
+	shape.shape = box
+	shape.position = hitbox_center
+	area.add_child(shape)
+	hitbox_area = area
+
+
+## Adds the pathfinding agent in code rather than to each zombie scene
+## variant, so they can't drift apart on it.
 ##
 ## Whether it's actually used is decided per frame by `_has_navigation_mesh()`:
 ## the flat test arena has no baked navmesh and doesn't need one, and a level
@@ -208,8 +278,10 @@ func take_damage(amount: float, hit_impulse: Vector3 = Vector3.ZERO) -> void:
 	health -= amount
 	if health <= 0.0:
 		die(hit_impulse)
-	else:
-		_play_anim([&"HitReact", &"HitRecieve", &"Scream"], true, true)
+	# No hit-reaction animation - it interrupted the chase/attack the zombie
+	# was already doing every time it took chip damage, which read as
+	# stuttery with several zombies converging and shooting overlapping.
+	# Matches the same call made for the player - see player.gd's take_damage.
 
 
 func is_dead() -> bool:
@@ -237,6 +309,17 @@ func die(_hit_impulse: Vector3 = Vector3.ZERO) -> void:
 	set_physics_process(false)
 	if collision_shape:
 		collision_shape.disabled = true
+	# Bug found by testing: a dead zombie kept blocking hitscan shots aimed at
+	# anything standing behind it, because only the movement capsule above got
+	# disabled here - HitboxArea (a separate, wider Area3D specifically so
+	# shots can land on outstretched arms; see that var's own comment) was
+	# never touched and stayed on PhysicsLayers.HITBOX forever, discoverable
+	# by a raycast for the full corpse_lifetime. Moving it off that layer
+	# (rather than just disabling its CollisionShape3D) is what actually
+	# removes it from consideration - collide_with_areas raycasts test layers,
+	# not per-shape disabled state.
+	if hitbox_area:
+		hitbox_area.collision_layer = 0
 
 	# Physics ragdoll (PhysicalBoneSimulator3D) kept stretching limbs into long
 	# spikes on this rig even after excluding finger/tongue/eyelid bones - a
@@ -251,7 +334,8 @@ func die(_hit_impulse: Vector3 = Vector3.ZERO) -> void:
 	_play_anim([&"Death", &"DeathAlt"], true, true)
 
 	if corpse_lifetime > 0.0:
-		get_tree().create_timer(corpse_lifetime).timeout.connect(queue_free)
+		# process_always=false so a corpse doesn't clean itself up mid-pause.
+		get_tree().create_timer(corpse_lifetime, false).timeout.connect(queue_free)
 
 
 ## This rig has small detail bones beyond the main skeleton (fingers, tongue,
@@ -362,9 +446,6 @@ func _configure_animation_loops() -> void:
 		&"Bite",
 		&"BiteAlt",
 		&"NeckBite",
-		&"HitReact",
-		&"HitRecieve",
-		&"Scream",
 		&"Death",
 		&"DeathAlt",
 	]:
@@ -383,7 +464,11 @@ func _update_animation() -> void:
 		return
 	match state:
 		State.CHASE:
-			_play_anim([&"Run", &"Walk"])
+			# gait ([&"Walk"] or [&"Run"], assigned by RoundDirector before this
+			# zombie entered the tree - see that var's own comment) is tried
+			# first; Run is still the fallback if a rig is somehow missing the
+			# assigned clip, matching the pre-gait default.
+			_play_anim([gait, &"Run", &"Walk"])
 		State.IDLE:
 			_play_anim([&"Idle"])
 		State.ATTACK:
