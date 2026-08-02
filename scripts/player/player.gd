@@ -13,6 +13,16 @@ const CROUCH_LERP_SPEED := 10.0
 const LOCOMOTION_BLEND_SPEED := 10.0
 const STANCE_BLEND_SPEED := 8.0
 
+## Target real-world duration for the holster/draw one-shots played on a weapon
+## switch, whatever the raw Mixamo clip's own length happens to be - both get
+## sped up (AnimationNodeTimeScale, same idiom as reload) to fit. Split
+## unevenly because only the holster half is gameplay-blocking -
+## WeaponController's _switch_timer waits on play_holster_animation()'s
+## return value - while the draw half is purely cosmetic and keeps playing
+## after the new weapon is already usable, so it can afford the larger share.
+const HOLSTER_ANIMATION_DURATION := 1.2
+const DRAW_ANIMATION_DURATION := 1.3
+
 ## Clips loaded over the soldier model's own at runtime, as loose Animation
 ## resources so the model itself is never rewritten. From Mixamo's Rifle 8-Way and
 ## Pistol/Handgun Locomotion Packs; see tools/build_clips.gd and LocomotionSets.
@@ -41,11 +51,34 @@ const SPINE_PITCH_BONES: Array[StringName] = [
 	&"mixamorig_Spine2",
 ]
 
+## What the first-person camera tracks - see _update_first_person_camera().
+const FPS_HEAD_BONE := &"mixamorig_Head"
+
 ## Aim correction: how fast the torso eases into the measured error, and how far
 ## it is allowed to twist. Both exist because the correction moves the weapon it
 ## was measured from, so the loop needs damping and a ceiling.
 const AIM_YAW_CORRECTION_SPEED := 0.25
+## Third person only - a bounded amount so a bad reading twists the torso
+## rather than spinning it, since the player can actually see this torso from
+## outside. First person has no such ceiling to respect (see
+## MAX_AIM_YAW_FIRST_PERSON) - found by probe while wiring up first-person
+## ADS: aim_yaw was pinning at this exact clamp during ADS in first person
+## (the camera's new head-height position needs more correction than
+## third-person's over-the-shoulder one ever did) and staying pinned rather
+## than settling, leaving the sight visibly misaligned from the crosshair
+## for as long as ADS was held - not a slow convergence, a permanent
+## steady-state error against a wall this low.
 const MAX_AIM_YAW := deg_to_rad(40.0)
+## First person: the player is looking out through the head, not at the
+## torso from outside, so an extreme twist here costs nothing visually the
+## way it would in third person - there's nothing for MAX_AIM_YAW's ceiling
+## to protect. Not fully unclamped (PI) regardless, since the correction
+## still cascades down the same arm chain the hands are posed from, and an
+## extreme enough twist could plausibly contort the visible forearms/hands
+## even if the spine itself is unseen. First guess, not eye-tuned - watch
+## the arms specifically (not just the sight alignment) if this needs
+## adjusting.
+const MAX_AIM_YAW_FIRST_PERSON := deg_to_rad(90.0)
 
 ## How far the camera can be pitched. Tighter than a first-person limit: swinging
 ## a third-person camera to vertical puts it inside the floor or directly overhead.
@@ -59,19 +92,86 @@ const CAMERA_PITCH_MAX := deg_to_rad(40.0)
 const REGEN_DELAY := 5.5
 const REGEN_FRACTION_PER_SECOND := 0.10
 
+## Quick Revive (scripts/economy/perk_machine.gd). Solo play has no one to revive
+## you, so going down with the perk owned self-revives on a timer instead of
+## ending the game outright - going down without it is unchanged (permanent
+## freeze, see take_damage). Invincible rather than making zombies path away
+## during the window: simpler, and doesn't touch scripts/ai/zombie.gd at all.
+const DOWNED_DURATION := 5.0
+const REVIVE_HEALTH_FRACTION := 0.5
+const REVIVE_INVINCIBILITY_DURATION := 4.0
+
 @export var max_health: float = 100.0
+## Off for test_arena.tscn's player instance - Esc there is meant to release
+## the mouse for editor use, not open a menu mid-test. On (the default)
+## everywhere else, including town.tscn.
+@export var pause_enabled := true
 ## Mixamo authors this character facing +Z while Godot gameplay forward is -Z, so
 ## the body is turned to face the direction the player is aiming and moving.
 @export var model_yaw_offset_degrees := 180.0
 ## How much of the camera pitch the torso follows, so the character visibly aims
 ## where the camera is pointed. Under 1.0 because a full match bends the spine
-## further than a person would.
+## further than a person would - a concern for someone watching this torso from
+## third person, same as MAX_AIM_YAW's ceiling on the yaw side (see that
+## const's own comment). First person uses spine_pitch_share_first_person
+## instead, same reasoning as the yaw clamp: nothing about this torso is
+## visible to the first-person player themselves, so there's nothing left for
+## an incomplete match to protect, and a full 1.0 here was needed alongside
+## the yaw fix to actually close ADS's sight-alignment residual - stopping
+## short on pitch left the same kind of steady-state gap the yaw clamp did,
+## just on the vertical axis instead of horizontal.
 @export_range(0.0, 1.0, 0.05) var spine_pitch_share := 0.75
+@export_range(0.0, 1.0, 0.05) var spine_pitch_share_first_person := 1.0
 ## How far back the camera sits normally, and while aiming. Pulling in over the
 ## shoulder to aim is the usual third-person shooter language for "aiming".
 @export_range(0.5, 8.0, 0.1) var camera_distance := 3.0
 @export_range(0.5, 8.0, 0.1) var camera_aim_distance := 1.4
 @export_range(1.0, 30.0, 0.5) var camera_zoom_speed := 10.0
+## How far right of the character's centreline the camera sits while aiming.
+## Shrunk from the hip-fire offset (CameraRig's own authored X, ~0.45) rather
+## than kept there: WeaponController's ADS sight-alignment nudge only
+## translates the camera, and at ADS's close spring_length a translation big
+## enough to cancel out the full hip-fire shoulder offset would be a bigger,
+## more visible shift than shrinking the offset itself ahead of time. This is
+## the shoulder pulling in toward the sight, not a separate system - the two
+## are meant to be tuned together.
+@export_range(0.0, 0.6, 0.01) var camera_aim_shoulder_offset := 0.15
+
+## True first person - see toggle_perspective() and _update_camera_distance().
+## Reuses the same world model/weapon everyone else sees rather than a
+## separate viewmodel asset (see docs/ASSET_PIPELINE.md's "two character
+## assets" section on why a viewmodel can't be carved from this model), so
+## switching modes is purely a camera change, nothing about the body or
+## weapon rig differs between the two.
+var is_first_person := false
+## Up from the live FPS_HEAD_BONE position to the camera, in first person -
+## the bone sits at the neck/skull joint, not out at the eyes, so this is
+## what actually reaches eye height. Applied fresh every frame in
+## _update_first_person_camera(), on top of wherever the bone currently is -
+## not a fixed offset from the capsule, which is what this used to be before
+## it turned out not to track a sprinting body's own head movement. First
+## guess, not eye-tuned yet - same live-tuning workflow as
+## WeaponController.support_hand_rotation_degrees: select Player in the
+## Remote scene tree while playing and drag this.
+@export_range(0.0, 0.4, 0.01) var fps_eye_height_offset := 0.15
+## How far in front of the live FPS_HEAD_BONE position the first-person
+## camera sits. mixamo_soldier.glb is one skinned mesh with no separable head
+## surface (see the probe run when this was built - checked before assuming
+## a split-mesh/shader-based head-hide was on the table), so nothing can hide
+## the skull from a camera placed at its centre the way a proper first-person
+## rig normally would. Pushing the camera forward past the face is the cheap
+## alternative: clears the skull for a forward-facing view, at the cost of
+## still clipping into the mesh if the camera pitches to look straight down
+## at the chest/collar. First guess, not eye-tuned.
+@export_range(0.0, 0.3, 0.01) var fps_forward_offset := 0.16
+## Left/right from the live FPS_HEAD_BONE position in first person - +X is
+## the character's right (their own left is +X per the model-facing
+## convention in scripts/player/locomotion_sets.gd's own header, but
+## CameraRig isn't flipped by model_yaw_offset_degrees the way Model is, so
+## this is simply screen-right for positive values). 0 is dead centre between
+## the eyes; nudge it toward whichever eye/cheek the head bone actually sits
+## under if centre reads off. First guess, not eye-tuned.
+@export_range(-0.15, 0.15, 0.01) var fps_x_offset := 0.07
 
 @onready var camera_rig: Node3D = $CameraRig
 @onready var spring_arm: SpringArm3D = $CameraRig/SpringArm3D
@@ -87,9 +187,40 @@ var gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var is_crouching := false
 var health: float
 var is_dead := false
+## True from a down (health hit 0 with Quick Revive owned) until the self-revive
+## timer finishes. Distinct from is_dead: incapacitated but recoverable.
+var is_downed := false
+## True during the post-revive grace window - see REVIVE_INVINCIBILITY_DURATION.
+var is_invincible := false
+## Perks owned this session, granted by scripts/economy/perk_machine.gd. Never
+## reset between rounds (RoundDirector doesn't touch player state), matching
+## how perks work in the game this is based on - they last until you die.
+var perks: Dictionary = {}
+## Stamin-Up multiplies this instead of the WALK/SPRINT/CROUCH speed consts
+## directly, since those are shared constants, not per-player state.
+var speed_multiplier := 1.0
 ## Spendable currency, earned by hitting and killing zombies. The buy systems -
-## wall weapons, the mystery box, map gates - all price against this.
-var points := 0
+## wall weapons, the mystery box, map gates - all price against this. Starts at
+## 500 rather than 0 - enough for a first ammo buy or a start toward a wall
+## weapon before any points have been earned. A one-time game-start amount,
+## not a per-round refill: RoundDirector never resets player state between
+## rounds (see its own CLAUDE.md), so this only ever applies once.
+var points := 500
+## Power-up drops (scripts/economy/power_up_drop.gd), ported from
+## zombie-town-online's DROPS/buffs. Timed buffs count down in _process()
+## rather than needing their own timers/signals - matches the source's own
+## `for(const k in buffs) if(buffs[k]>0) buffs[k]=Math.max(0,buffs[k]-dt)`.
+## Not reset between rounds, same as points/perks above.
+const POWER_UP_DURATION := 30.0
+var instakill_remaining := 0.0
+var doublepoints_remaining := 0.0
+var firesale_remaining := 0.0
+
+## Every Interactable (scripts/economy/interactable.gd) the player is currently
+## standing inside the range of. Nearest one gets the HUD prompt and the
+## "interact" keypress - see _update_interaction().
+var _nearby_interactables: Array = []
+var _current_interactable: Node = null
 var time_since_damaged := 0.0
 var was_on_floor := true
 var active_full_body_animation: StringName = &""
@@ -100,8 +231,26 @@ var body_skeleton: Skeleton3D
 var aim_yaw := 0.0
 var animation_blend_tree: AnimationNodeBlendTree
 var fire_animation_node: AnimationNodeAnimation
+var draw_animation_node: AnimationNodeAnimation
+var draw_shot_node: AnimationNodeOneShot
+var holster_animation_node: AnimationNodeAnimation
+var holster_shot_node: AnimationNodeOneShot
+## True once a weapon has actually been equipped through _on_weapon_changed, as
+## opposed to _ready()'s catch-up call for the starting weapon - see that
+## function's comment.
+var _has_equipped_weapon := false
+## CameraRig's authored hip-fire X offset, captured once - _update_camera_distance
+## lerps camera_rig.position.x back to this when not aiming.
+var _camera_rig_hip_x := 0.0
 var locomotion_blend := Vector2.ZERO
 var sprint_blend := 0.0
+## Set every physics frame in _physics_process(). WeaponController reads this
+## to refuse firing while sprinting (owner.is_sprinting - same direct-query
+## pattern as has_instakill()) - matches ordinary FPS convention, and the
+## rifle set already released spine-aim during a sprint for a related reason
+## (see _apply_spine_aim's own comment), so the gun visually swinging loose
+## while sprinting was already true before this made it also unfireable.
+var is_sprinting := false
 var stance_blend := 0.0
 ## Locomotion set the body is currently carrying its weapon with.
 var current_set: StringName = DEFAULT_SET
@@ -120,6 +269,12 @@ var is_playing_landing := false
 signal health_changed(current: float, max: float)
 signal points_changed(total: int, delta: int)
 signal died
+signal downed(duration: float)
+signal revived
+signal interactable_changed(prompt_text: String) ## empty string means "hide the prompt"
+signal paused_changed(is_paused: bool)
+signal perk_granted(key: StringName)
+signal perspective_changed(is_first_person: bool)
 
 
 func _ready() -> void:
@@ -129,11 +284,24 @@ func _ready() -> void:
 	# priority means later, so this orders the frame as
 	# AnimationTree -> player -> WeaponController's support-arm IK.
 	process_priority = 10
+	_camera_rig_hip_x = camera_rig.position.x
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	health = max_health
 	add_to_group("player")
 	collision_layer = PhysicsLayers.ACTORS
-	collision_mask = PhysicsLayers.WORLD | PhysicsLayers.ACTORS
+	# WORLD only, not ACTORS - deliberately one-way. zombie.gd keeps ACTORS in
+	# its own mask, so a zombie still can't walk through the player or through
+	# each other. But move_and_slide()'s push comes from whichever body is
+	# doing the resolving: with both sides checking ACTORS, the player's own
+	# move_and_slide was resolving against every overlapping zombie capsule
+	# every physics frame, and a horde converging from multiple directions
+	# could ratchet that into real displacement - measured at 167m over one
+	# probe run. Dropping ACTORS here means the player never runs that
+	# resolution at all, so a crowd can visually crowd the player (capsules
+	# may overlap) but can never shove it. Zombies remain solid to the player
+	# from the zombie's own side, so walking into one from a standstill still
+	# meets resistance - it just can't compound as your own solver's fight.
+	collision_mask = PhysicsLayers.WORLD
 	model.rotation_degrees.y = model_yaw_offset_degrees
 	body_skeleton = NodeUtils.find_first_of_type(model, "Skeleton3D") as Skeleton3D
 	# The arm only needs to stop at walls, not at the player or at zombies - it
@@ -161,6 +329,11 @@ func _ready() -> void:
 	# never has to know what's on screen.
 	hud.bind_player(self, weapon_controller)
 	health_changed.emit(health, max_health)
+	# Catches up the points display on the starting 500, same reason
+	# health_changed is emitted here - the HUD only updates from signals, and
+	# without this it would sit on the scene's placeholder "0" text until the
+	# first point is earned.
+	points_changed.emit(points, points)
 
 
 ## Reapplied every frame because the AnimationTree rewrites the bone poses each
@@ -168,7 +341,55 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_apply_spine_aim()
 	_update_camera_distance(delta)
+	_update_first_person_camera()
 	_update_regen(delta)
+	_update_interaction()
+	instakill_remaining = maxf(0.0, instakill_remaining - delta)
+	doublepoints_remaining = maxf(0.0, doublepoints_remaining - delta)
+	firesale_remaining = maxf(0.0, firesale_remaining - delta)
+
+
+## True while movement/actions should be locked out - dead or downed. Kept
+## separate from is_invincible, which only blocks damage: a player who just
+## finished reviving should be able to move and shoot immediately.
+func _is_incapacitated() -> bool:
+	return is_dead or is_downed
+
+
+## Picks the nearest in-range Interactable (scripts/economy/interactable.gd),
+## tells the HUD about it if it changed, and fires it on an "interact" press.
+## Interactables register themselves via their own Area3D body_entered/exited
+## rather than the player scanning for them, so this is just a pick-nearest
+## over an already-short list.
+func _update_interaction() -> void:
+	var nearest: Node = null
+	var nearest_dist := INF
+	for interactable in _nearby_interactables:
+		if not is_instance_valid(interactable):
+			continue
+		var d := global_position.distance_to(interactable.global_position)
+		if d < nearest_dist:
+			nearest_dist = d
+			nearest = interactable
+	if nearest != _current_interactable:
+		_current_interactable = nearest
+		interactable_changed.emit(nearest.prompt_text(self) if nearest else "")
+	if nearest and not _is_incapacitated() and Input.is_action_just_pressed("interact"):
+		nearest.attempt_purchase(self)
+		# Cost or ownership may have just changed what the prompt should say.
+		interactable_changed.emit(nearest.prompt_text(self))
+
+
+func register_interactable(interactable: Node) -> void:
+	if not _nearby_interactables.has(interactable):
+		_nearby_interactables.append(interactable)
+
+
+func unregister_interactable(interactable: Node) -> void:
+	_nearby_interactables.erase(interactable)
+	if _current_interactable == interactable:
+		_current_interactable = null
+		interactable_changed.emit("")
 
 
 ## Heals back to full once the player has been out of trouble long enough. The
@@ -184,13 +405,73 @@ func _update_regen(delta: float) -> void:
 	health_changed.emit(health, max_health)
 
 
-## Pulls the camera in over the shoulder while aiming and lets it back out again.
+## Pulls the camera in over the shoulder while aiming and lets it back out
+## again - and, on the same lerp, shrinks the shoulder offset itself. Only X:
+## Y is owned by _update_crouch and, in first person, X/Y/Z both end up owned
+## by _update_first_person_camera() instead - see that function's own comment
+## for why. spring_length is the one part of this still shared across both
+## perspectives: first person collapses it to (near) zero, putting the camera
+## at CameraRig's own origin instead of on a boom behind it, which
+## _update_first_person_camera() then repositions off the head bone.
 func _update_camera_distance(delta: float) -> void:
 	var aiming := weapon_controller != null and weapon_controller.is_aiming
+	var t := 1.0 - exp(-camera_zoom_speed * delta)
 	spring_arm.spring_length = lerpf(
 		spring_arm.spring_length,
-		camera_aim_distance if aiming else camera_distance,
-		1.0 - exp(-camera_zoom_speed * delta)
+		0.0 if is_first_person else (camera_aim_distance if aiming else camera_distance),
+		t
+	)
+	if is_first_person:
+		return
+	camera_rig.position.x = lerpf(
+		camera_rig.position.x,
+		camera_aim_shoulder_offset if aiming else _camera_rig_hip_x,
+		t
+	)
+	camera_rig.position.z = lerpf(camera_rig.position.z, 0.0, t)
+
+
+## Overrides camera_rig.position (all three axes) in first person, off the
+## live head bone rather than a fixed offset from the capsule.
+##
+## The first version used a fixed capsule-relative offset, the same way
+## _update_crouch's third-person Y always has - simpler, and avoids coupling
+## the camera to whatever a locomotion clip happens to be doing with the
+## head/neck. That was also the problem: a fixed offset only lines up with
+## the actual head while the body is roughly in its idle pose. The rifle
+## sprint clip in particular swings the whole upper body well off that
+## (`scripts/player/CLAUDE.md`'s "rifle set's sprint is empty-handed" gap
+## covers the same clip's arm swing for a different reason), and a camera
+## that hasn't moved with it looks like it's clipped *out* through the face
+## and chest instead of staying enveloped. Tracking the bone directly means
+## the camera moves exactly as far as the head mesh does, every frame,
+## whatever clip is currently blended in - so they stay coincident instead of
+## agreeing only at a rest pose.
+##
+## fps_eye_height_offset/fps_forward_offset/fps_x_offset are still applied on
+## top, now as a small nudge off the bone (which sits at the neck/skull
+## joint, not out at the eyes) rather than off the capsule top - the same
+## three tuned values carry over, they just mean something slightly
+## different now.
+##
+## No lerp: the head bone's own position is already smoothed by whatever
+## animation is blended in, and trailing a second lerp behind an already-
+## moving target would lag the camera behind fast motion (a sprint's own bob
+## cycle) instead of fixing that. Toggling into first person snaps straight
+## to the head bone's current position rather than easing in, which is the
+## one small cost - a same-frame pop when pressing the key, not a lag while
+## already moving.
+func _update_first_person_camera() -> void:
+	if not is_first_person or body_skeleton == null:
+		return
+	var head_index := body_skeleton.find_bone(FPS_HEAD_BONE)
+	if head_index < 0:
+		return
+	var head_world: Vector3 = (
+		body_skeleton.global_transform * body_skeleton.get_bone_global_pose(head_index)
+	).origin
+	camera_rig.position = to_local(head_world) + Vector3(
+		fps_x_offset, fps_eye_height_offset, -fps_forward_offset
 	)
 
 
@@ -210,10 +491,13 @@ func _update_camera_distance(delta: float) -> void:
 ## trace from the camera), but a weapon visibly pointing somewhere else is worse
 ## than a slightly overturned torso.
 func _apply_spine_aim() -> void:
-	if body_skeleton == null or is_dead:
+	if body_skeleton == null or _is_incapacitated():
 		return
+	var active_pitch_share := (
+		spine_pitch_share_first_person if is_first_person else spine_pitch_share
+	)
 	var pitch_share := (
-		-spring_arm.rotation.x * spine_pitch_share / float(SPINE_PITCH_BONES.size())
+		-spring_arm.rotation.x * active_pitch_share / float(SPINE_PITCH_BONES.size())
 	)
 	# Unwound while sprinting rather than corrected. The sprint clip swings both
 	# arms, so the weapon follows a swinging hand and closing the gap would need
@@ -223,10 +507,13 @@ func _apply_spine_aim() -> void:
 	# Eased, because the correction turns the weapon the error was measured from.
 	# Clamped, so a bad reading twists the torso a bounded amount rather than
 	# spinning it - which is exactly what happened the first time this was tried.
+	# The bound itself is perspective-dependent - see MAX_AIM_YAW_FIRST_PERSON's
+	# own comment.
+	var max_yaw := MAX_AIM_YAW_FIRST_PERSON if is_first_person else MAX_AIM_YAW
 	aim_yaw = clampf(
 		lerpf(aim_yaw, target, AIM_YAW_CORRECTION_SPEED),
-		-MAX_AIM_YAW,
-		MAX_AIM_YAW
+		-max_yaw,
+		max_yaw
 	)
 	var yaw_share := aim_yaw / float(SPINE_PITCH_BONES.size())
 	if is_zero_approx(pitch_share) and is_zero_approx(yaw_share):
@@ -283,8 +570,8 @@ func _measure_aim_yaw_error() -> float:
 ## play, they just read worse than the pack's.
 func _install_extra_clips() -> void:
 	var library := anim_player.get_animation_library(&"")
-	for set_name in INSTALLED_SETS:
-		var paths := LocomotionSets.clip_paths(set_name)
+	for locomotion_set in INSTALLED_SETS:
+		var paths := LocomotionSets.clip_paths(locomotion_set)
 		var missing := 0
 		for clip_name in paths:
 			if not ResourceLoader.exists(paths[clip_name]):
@@ -298,8 +585,24 @@ func _install_extra_clips() -> void:
 				(
 					"%d of the %d '%s' locomotion clips are missing; run"
 					+ " `godot --headless --path . --script tools/build_clips.gd -- %s`."
-				) % [missing, paths.size(), set_name, set_name]
+				) % [missing, paths.size(), locomotion_set, locomotion_set]
 			)
+		# Optional and outside the missing-clips warning above: a set with no draw
+		# clip yet just keeps its instant weapon swap - see _on_weapon_changed.
+		var draw_path := LocomotionSets.draw_clip_path(locomotion_set)
+		var draw_name := LocomotionSets.draw_clip_installed_name(locomotion_set)
+		if draw_path != "" and ResourceLoader.exists(draw_path):
+			if library.has_animation(draw_name):
+				library.remove_animation(draw_name)
+			library.add_animation(draw_name, load(draw_path))
+		# Same, for the outgoing weapon's holster one-shot - see
+		# play_holster_animation().
+		var holster_path := LocomotionSets.holster_clip_path(locomotion_set)
+		var holster_name := LocomotionSets.holster_clip_installed_name(locomotion_set)
+		if holster_path != "" and ResourceLoader.exists(holster_path):
+			if library.has_animation(holster_name):
+				library.remove_animation(holster_name)
+			library.add_animation(holster_name, load(holster_path))
 
 
 ## Turns a confirmed hit into points. The award scales with the round, so the
@@ -314,27 +617,125 @@ func _on_hit_confirmed(part: StringName, killed: bool) -> void:
 func award_points(amount: int) -> void:
 	if amount == 0:
 		return
+	if doublepoints_remaining > 0.0:
+		amount *= 2
 	points += amount
 	points_changed.emit(points, amount)
 
 
+## Read by WeaponController - see its own comment at the call site - rather
+## than exposing the raw timer, so the "what counts as active" threshold
+## lives in exactly one place.
+func has_instakill() -> bool:
+	return instakill_remaining > 0.0
+
+
+## Used by every economy purchase (scripts/economy/*.gd). Refuses rather than
+## going negative - callers are expected to check affordability via
+## Interactable._can_interact() before calling this, this is the enforcement.
+func spend_points(amount: int) -> bool:
+	if amount <= 0 or points < amount:
+		return false
+	points -= amount
+	points_changed.emit(points, -amount)
+	return true
+
+
+## One-time grant from scripts/economy/perk_machine.gd. Perks that adjust an
+## ongoing rate (reload speed, move speed, damage) are read from `perks`/
+## `speed_multiplier` at the point of use rather than applied here, so nothing
+## needs undoing if perks were ever lost - Juggernog's health boost is the one
+## exception, since "how much max health you have" has nowhere else to live.
+func grant_perk(key: StringName) -> void:
+	if perks.get(key, false):
+		return
+	perks[key] = true
+	if key == &"jugg":
+		max_health = 250.0
+		health = max_health
+		health_changed.emit(health, max_health)
+	perk_granted.emit(key)
+
+
 func take_damage(amount: float) -> void:
-	if is_dead:
+	if is_dead or is_downed or is_invincible:
 		return
 	health -= amount
 	time_since_damaged = 0.0
 	health_changed.emit(health, max_health)
 	if health <= 0.0:
-		is_dead = true
-		hud.visible = false
-		airborne_animation = &""
-		_play_full_body_animation([&"death"])
-		died.emit()
-		# TODO: no death/respawn flow yet - player just stops taking further damage.
+		if perks.get(&"revive", false):
+			_go_down()
+		else:
+			_die()
 	# No hit reaction. The clip is a full-body flinch that interrupts whatever the
 	# player was doing - aiming, sprinting - and taking control away every time a
 	# zombie connects feels worse than showing nothing. Damage feedback belongs on
 	# the HUD instead.
+
+
+func _die() -> void:
+	is_dead = true
+	hud.visible = false
+	airborne_animation = &""
+	_play_full_body_animation([&"death"], 1.0, true)
+	died.emit()
+	# TODO: no death/respawn flow yet - player just stops taking further damage.
+
+
+## Quick Revive's actual effect - see the const block up top for why this
+## exists instead of just dying. Movement/fire/reload are locked out via
+## _is_incapacitated(); health regen (_update_regen) also checks is_dead only,
+## not is_downed, but that's harmless - health is about to be overwritten by
+## _finish_revive() regardless of what regen does to it in the meantime.
+func _go_down() -> void:
+	is_downed = true
+	airborne_animation = &""
+	# No dedicated downed/crawl clip exists on this model (checked
+	# ASSET_MANIFEST.md - only the zombie models ship one). crouch_idle is the
+	# closest held pose available and isn't configured to loop, so it plays
+	# once and holds on its last frame - which is what a static "down" pose
+	# needs anyway.
+	_play_full_body_animation([&"crouch_idle"], 1.0, true)
+	downed.emit(DOWNED_DURATION)
+	# process_always=false - SceneTreeTimer defaults to counting through a
+	# pause, which would auto-revive a downed player while they're sitting in
+	# the pause menu instead of waiting for them to resume.
+	get_tree().create_timer(DOWNED_DURATION, false).timeout.connect(_finish_revive)
+
+
+func _finish_revive() -> void:
+	is_downed = false
+	active_full_body_animation = &""
+	health = max_health * REVIVE_HEALTH_FRACTION
+	# Otherwise regen (_update_regen) could start topping this up immediately -
+	# time_since_damaged has been counting since the original hit that caused
+	# the down, which by DOWNED_DURATION later is usually already past
+	# REGEN_DELAY.
+	time_since_damaged = 0.0
+	health_changed.emit(health, max_health)
+	is_invincible = true
+	revived.emit()
+	get_tree().create_timer(REVIVE_INVINCIBILITY_DURATION, false).timeout.connect(
+		func() -> void: is_invincible = false
+	)
+
+
+## Pauses/unpauses the whole SceneTree - which is what actually freezes
+## zombies, the round timer, and every other node's default process_mode,
+## with no per-system changes needed. HUD's PauseOverlay (and only that
+## overlay - see hud.tscn) is set to PROCESS_MODE_ALWAYS so its own buttons
+## stay clickable while everything else is frozen.
+func _set_paused(value: bool) -> void:
+	get_tree().paused = value
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if value else Input.MOUSE_MODE_CAPTURED
+	paused_changed.emit(value)
+
+
+## Called by HUD's Resume button - see _set_paused for why toggling
+## get_tree().paused is what this actually needs to do.
+func resume() -> void:
+	_set_paused(false)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -353,12 +754,36 @@ func _unhandled_input(event: InputEvent) -> void:
 			CAMERA_PITCH_MAX
 		)
 	elif event.is_action_pressed("ui_cancel"):
-		var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if captured else Input.MOUSE_MODE_CAPTURED
+		if not pause_enabled:
+			# test_arena.tscn only - Esc just releases the mouse for editor use
+			# (the pre-pause-menu behavior), not the actual pause menu, so a
+			# test session isn't interrupted by a menu every time the cursor
+			# needs freeing.
+			var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+			Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if captured else Input.MOUSE_MODE_CAPTURED
+			return
+		# Game over already released the mouse and shows its own overlay -
+		# pausing on top of that would just be a second menu fighting the first.
+		if is_dead:
+			return
+		_set_paused(not get_tree().paused)
+	elif event.is_action_pressed("toggle_perspective"):
+		toggle_perspective()
+
+
+## Bound to toggle_perspective (V). A plain assignment would do the same
+## thing, but the HUD needs to know too - crosshair.gd hides the reticle
+## while aiming in first person, since the weapon's own sight is the aim
+## reference at that point, not a screen-centre dot (see
+## _update_ads_sight_alignment() in scripts/weapons/weapon_controller.gd for
+## the nudge that actually lines the camera up with it).
+func toggle_perspective() -> void:
+	is_first_person = not is_first_person
+	perspective_changed.emit(is_first_person)
 
 
 func _physics_process(delta: float) -> void:
-	if is_dead:
+	if _is_incapacitated():
 		velocity.x = move_toward(velocity.x, 0.0, WALK_SPEED * delta)
 		velocity.z = move_toward(velocity.z, 0.0, WALK_SPEED * delta)
 		if not is_on_floor():
@@ -377,7 +802,7 @@ func _physics_process(delta: float) -> void:
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var move_dir := (transform.basis * Vector3(input_dir.x, 0.0, input_dir.y)).normalized()
 
-	var is_sprinting := (
+	is_sprinting = (
 		not is_crouching
 		and Input.is_action_pressed("sprint")
 		and input_dir.y < 0.0
@@ -387,6 +812,7 @@ func _physics_process(delta: float) -> void:
 		speed = CROUCH_SPEED
 	elif is_sprinting:
 		speed = SPRINT_SPEED
+	speed *= speed_multiplier
 
 	if move_dir.length() > 0.0:
 		velocity.x = move_dir.x * speed
@@ -405,7 +831,7 @@ func _physics_process(delta: float) -> void:
 		1.0
 	)
 	crosshair.set_movement_amount(movement_amount)
-	_update_animation(delta, just_landed, input_dir, is_sprinting)
+	_update_animation(delta, just_landed, input_dir)
 
 
 func _update_crouch(delta: float) -> void:
@@ -417,20 +843,35 @@ func _update_crouch(delta: float) -> void:
 	# The rig rides the capsule so crouching lowers the camera with the character.
 	# Only Y - X is the over-the-shoulder offset that keeps the character out of
 	# the middle of the screen, and it has to stay put.
+	#
+	# Skipped outright in first person, not just left to be overwritten:
+	# _update_first_person_camera() owns camera_rig.position there instead (all
+	# three axes, off the live head bone - see that function's own comment for
+	# why a fixed offset like this one couldn't track a sprinting body's own
+	# head movement). This runs on the physics tick, that one on the idle tick
+	# - two different clocks - so "runs later in the same frame, so it wins"
+	# doesn't hold the way it would if both were on the same one. Actually
+	# leaving this write in was found racing the other function directly: this
+	# would win on whichever tick happened to land last, which is why ADS's
+	# sight alignment (reading camera_rig's position through the camera)
+	# measured an erratically growing residual instead of converging smoothly
+	# - not a bug in the alignment math itself, this was fighting it for the
+	# property underneath.
+	if is_first_person:
+		return
 	camera_rig.position.y = shape.height - 0.3
 
 
 func _update_animation(
 	delta: float,
 	just_landed: bool,
-	input_dir: Vector2,
-	is_sprinting: bool
+	input_dir: Vector2
 ) -> void:
 	if anim_player == null:
 		return
-	# Death holds the body, and the landing clip is allowed to finish before
-	# locomotion takes back over.
-	if is_dead or is_playing_landing:
+	# Death/downed hold the body, and the landing clip is allowed to finish
+	# before locomotion takes back over.
+	if _is_incapacitated() or is_playing_landing:
 		return
 	if not is_on_floor():
 		# Tracked by key rather than by clip name, because a set may use one clip
@@ -450,7 +891,7 @@ func _update_animation(
 	if active_full_body_animation != &"":
 		return
 	_set_animation_tree_active(true)
-	_update_locomotion_blend(delta, input_dir, is_sprinting)
+	_update_locomotion_blend(delta, input_dir)
 
 
 ## The installed name of one of the current set's clips - `idle`, `crouch_idle`,
@@ -478,10 +919,22 @@ func _configure_animation_loops() -> void:
 		if loop_animation != &"":
 			anim_player.get_animation(loop_animation).loop_mode = Animation.LOOP_LINEAR
 	var one_shots: Array[StringName] = [&"fire", &"fire_move", &"reload", &"death"]
-	for set_name in INSTALLED_SETS:
-		var definition := LocomotionSets.get_set(set_name)
-		one_shots.append(LocomotionSets.installed_name(set_name, definition.jump_up))
-		one_shots.append(LocomotionSets.installed_name(set_name, definition.jump_down))
+	for locomotion_set in INSTALLED_SETS:
+		var definition := LocomotionSets.get_set(locomotion_set)
+		one_shots.append(LocomotionSets.installed_name(locomotion_set, definition.jump_up))
+		one_shots.append(LocomotionSets.installed_name(locomotion_set, definition.jump_down))
+		# Raw Mixamo imports for draw/holster come in LOOP_LINEAR like every other
+		# clip in the pack, but these two play inside a one-shot node
+		# (DrawShot/HolsterShot), not the locomotion blend - a one-shot only
+		# fades back out once the animation it's playing actually finishes,
+		# and a looping clip never does. Without this, drawing or holstering a
+		# weapon holds that pose forever instead of handing back to locomotion.
+		var draw_clip := LocomotionSets.draw_clip_installed_name(locomotion_set)
+		if draw_clip != &"":
+			one_shots.append(draw_clip)
+		var holster_clip := LocomotionSets.holster_clip_installed_name(locomotion_set)
+		if holster_clip != &"":
+			one_shots.append(holster_clip)
 	for requested_name in one_shots:
 		var one_shot_animation := _find_animation([requested_name])
 		if one_shot_animation != &"":
@@ -517,6 +970,21 @@ func _setup_animation_tree() -> void:
 	reload_shot.fadein_time = 0.12
 	reload_shot.fadeout_time = 0.2
 	_configure_upper_body_filter(reload_shot, &"reload")
+	# Empty until a set actually has a draw clip on disk - _on_weapon_changed
+	# only ever requests this one-shot once it's found a real clip to point it
+	# at, so an empty animation here is never played.
+	draw_animation_node = AnimationNodeAnimation.new()
+	var draw_speed := AnimationNodeTimeScale.new()
+	draw_shot_node = AnimationNodeOneShot.new()
+	draw_shot_node.fadein_time = 0.1
+	draw_shot_node.fadeout_time = 0.15
+	# Same shape as draw - empty/unused until play_holster_animation() finds a
+	# real clip to point it at.
+	holster_animation_node = AnimationNodeAnimation.new()
+	var holster_speed := AnimationNodeTimeScale.new()
+	holster_shot_node = AnimationNodeOneShot.new()
+	holster_shot_node.fadein_time = 0.08
+	holster_shot_node.fadeout_time = 0.12
 
 	animation_blend_tree.add_node(&"NormalSpace", normal_space)
 	animation_blend_tree.add_node(&"SprintSpace", sprint_space)
@@ -529,6 +997,12 @@ func _setup_animation_tree() -> void:
 	animation_blend_tree.add_node(&"ReloadAnimation", reload_animation_node)
 	animation_blend_tree.add_node(&"ReloadSpeed", reload_speed)
 	animation_blend_tree.add_node(&"ReloadShot", reload_shot)
+	animation_blend_tree.add_node(&"DrawAnimation", draw_animation_node)
+	animation_blend_tree.add_node(&"DrawSpeed", draw_speed)
+	animation_blend_tree.add_node(&"DrawShot", draw_shot_node)
+	animation_blend_tree.add_node(&"HolsterAnimation", holster_animation_node)
+	animation_blend_tree.add_node(&"HolsterSpeed", holster_speed)
+	animation_blend_tree.add_node(&"HolsterShot", holster_shot_node)
 
 	animation_blend_tree.connect_node(&"SprintBlend", 0, &"NormalSpace")
 	animation_blend_tree.connect_node(&"SprintBlend", 1, &"SprintSpace")
@@ -540,7 +1014,13 @@ func _setup_animation_tree() -> void:
 	animation_blend_tree.connect_node(&"ReloadSpeed", 0, &"ReloadAnimation")
 	animation_blend_tree.connect_node(&"ReloadShot", 0, &"FireShot")
 	animation_blend_tree.connect_node(&"ReloadShot", 1, &"ReloadSpeed")
-	animation_blend_tree.connect_node(&"output", 0, &"ReloadShot")
+	animation_blend_tree.connect_node(&"DrawSpeed", 0, &"DrawAnimation")
+	animation_blend_tree.connect_node(&"DrawShot", 0, &"ReloadShot")
+	animation_blend_tree.connect_node(&"DrawShot", 1, &"DrawSpeed")
+	animation_blend_tree.connect_node(&"HolsterSpeed", 0, &"HolsterAnimation")
+	animation_blend_tree.connect_node(&"HolsterShot", 0, &"DrawShot")
+	animation_blend_tree.connect_node(&"HolsterShot", 1, &"HolsterSpeed")
+	animation_blend_tree.connect_node(&"output", 0, &"HolsterShot")
 
 	# The blend points were created empty; this is what fills their clip names in.
 	_apply_locomotion_set(current_set)
@@ -599,35 +1079,91 @@ func _create_blend_point(tier: StringName, key: StringName) -> AnimationNodeAnim
 ## Refused wholesale if any clip is missing, rather than applied partially: a
 ## square with a few dead points is a character who freezes when they strafe,
 ## which is harder to diagnose than simply keeping the stance they had.
-func _apply_locomotion_set(set_name: StringName) -> bool:
-	var definition := LocomotionSets.get_set(set_name)
+func _apply_locomotion_set(locomotion_set: StringName) -> bool:
+	var definition := LocomotionSets.get_set(locomotion_set)
 	var resolved: Array[StringName] = []
 	for point in blend_points:
 		var clip: StringName = (
 			definition[point.key] if point.tier == &"" else definition[point.tier][point.key]
 		)
-		var installed := LocomotionSets.installed_name(set_name, clip)
+		var installed := LocomotionSets.installed_name(locomotion_set, clip)
 		if not anim_player.has_animation(installed):
 			push_warning(
 				"Locomotion set '%s' is missing '%s'; staying on '%s'."
-				% [set_name, installed, current_set]
+				% [locomotion_set, installed, current_set]
 			)
 			return false
 		resolved.append(installed)
 
 	for index in blend_points.size():
 		blend_points[index].node.animation = resolved[index]
-	current_set = set_name
-	set_has_sprint = LocomotionSets.has_distinct_sprint(set_name)
+	current_set = locomotion_set
+	set_has_sprint = LocomotionSets.has_distinct_sprint(locomotion_set)
 	return true
 
 
-## Swaps the body's stance to match the weapon being carried.
+## Swaps the body's stance to match the weapon being carried, and plays a draw
+## one-shot if that set has one on disk yet - see LocomotionSets.SETS' "draw"
+## key. Skipped on the very first call, which is _ready() catching this
+## listener up on the starting weapon rather than an actual switch; nothing is
+## drawn "from" at game start.
 func _on_weapon_changed(weapon: WeaponData, _slot: int) -> void:
 	if weapon == null or blend_points.is_empty():
 		return
 	if weapon.locomotion_set != current_set:
 		_apply_locomotion_set(weapon.locomotion_set)
+	if _has_equipped_weapon:
+		_play_draw_animation(weapon.locomotion_set)
+	_has_equipped_weapon = true
+
+
+## No-op until a draw clip actually exists for this set - see the SETS comment
+## in locomotion_sets.gd. Filtered to the upper body each call, same as
+## fire/reload, rather than once at tree-setup time, because the clip (and
+## therefore its track list) may not exist yet when the tree is first built.
+func _play_draw_animation(locomotion_set: StringName) -> void:
+	if _is_incapacitated() or animation_tree == null or not animation_tree.active:
+		return
+	var draw_name := LocomotionSets.draw_clip_installed_name(locomotion_set)
+	if draw_name == &"" or not anim_player.has_animation(draw_name):
+		return
+	draw_animation_node.animation = draw_name
+	_configure_upper_body_filter(draw_shot_node, draw_name)
+	animation_tree.set(
+		"parameters/DrawSpeed/scale",
+		anim_player.get_animation(draw_name).length / DRAW_ANIMATION_DURATION
+	)
+	animation_tree.set(
+		"parameters/DrawShot/request",
+		AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
+	)
+
+
+## Called by WeaponController.equip_slot() before it actually swaps weapons -
+## see that function's own comment. Returns how long the caller should wait
+## before performing the swap: HOLSTER_ANIMATION_DURATION if a clip was found
+## and played (the sped-up duration actually being played, not the raw clip's
+## own length - see that constant's comment), 0.0 if there's nothing to play
+## (no clip for this set yet, or animation is otherwise unavailable), which
+## tells the caller to swap instantly exactly as it did before this existed.
+## Public (no leading underscore) since WeaponController calls it via owner.
+func play_holster_animation(locomotion_set: StringName) -> float:
+	if _is_incapacitated() or animation_tree == null or not animation_tree.active:
+		return 0.0
+	var holster_name := LocomotionSets.holster_clip_installed_name(locomotion_set)
+	if holster_name == &"" or not anim_player.has_animation(holster_name):
+		return 0.0
+	holster_animation_node.animation = holster_name
+	_configure_upper_body_filter(holster_shot_node, holster_name)
+	animation_tree.set(
+		"parameters/HolsterSpeed/scale",
+		anim_player.get_animation(holster_name).length / HOLSTER_ANIMATION_DURATION
+	)
+	animation_tree.set(
+		"parameters/HolsterShot/request",
+		AnimationNodeOneShot.ONE_SHOT_REQUEST_FIRE
+	)
+	return HOLSTER_ANIMATION_DURATION
 
 
 func _create_animation_node(
@@ -676,15 +1212,15 @@ func _has_locomotion_clips() -> bool:
 ## Locomotion loops; one-shots are listed separately in _configure_animation_loops.
 func _looping_clip_names() -> Array[StringName]:
 	var names: Array[StringName] = []
-	for set_name in INSTALLED_SETS:
-		var definition := LocomotionSets.get_set(set_name)
-		names.append(LocomotionSets.installed_name(set_name, definition.idle))
-		names.append(LocomotionSets.installed_name(set_name, definition.crouch_idle))
-		names.append(LocomotionSets.installed_name(set_name, definition.jump_loop))
+	for locomotion_set in INSTALLED_SETS:
+		var definition := LocomotionSets.get_set(locomotion_set)
+		names.append(LocomotionSets.installed_name(locomotion_set, definition.idle))
+		names.append(LocomotionSets.installed_name(locomotion_set, definition.crouch_idle))
+		names.append(LocomotionSets.installed_name(locomotion_set, definition.jump_loop))
 		for tier in LocomotionSets.TIERS:
 			for direction in LocomotionSets.DIRECTIONS:
 				names.append(
-					LocomotionSets.installed_name(set_name, definition[tier][direction])
+					LocomotionSets.installed_name(locomotion_set, definition[tier][direction])
 				)
 	return names
 
@@ -698,8 +1234,7 @@ func _has_animations(animation_names: Array) -> bool:
 
 func _update_locomotion_blend(
 	delta: float,
-	input_dir: Vector2,
-	is_sprinting: bool
+	input_dir: Vector2
 ) -> void:
 	locomotion_blend = locomotion_blend.lerp(
 		input_dir,
@@ -756,8 +1291,28 @@ func _on_animation_finished(animation_name: StringName) -> void:
 		return
 	if animation_name == _find_animation([&"death"]):
 		return
+	# Downed holds on the crouch_idle pose (see _go_down) until _finish_revive
+	# clears active_full_body_animation itself - reactivating locomotion here
+	# would let the character pop back to a standing idle mid-down.
+	if is_downed:
+		return
 	active_full_body_animation = &""
 	is_playing_landing = false
+	# Bug found by testing: jump_up is a one-shot, and its own clip length has
+	# no relationship to how long the actual jump arc takes - if it finishes
+	# before the character reaches the peak (still rising, still airborne),
+	# this fired with is_on_floor() still false and nothing here cleared
+	# airborne_animation. _update_animation()'s airborne branch only
+	# re-triggers a clip when desired_air_animation != airborne_animation, so
+	# the very next frame recomputed the same "jump_up" (still rising) it had
+	# already stored, matched it, and skipped playing anything at all -
+	# leaving animation_tree.active permanently false with nothing driving
+	# the pose until landing happened to force a fresh jump_down and recover
+	# it from there. Clearing it here too, not just below, means the airborne
+	# branch always sees a real mismatch and re-requests whatever's actually
+	# appropriate (most likely jump_loop by then) on the very next frame
+	# instead of silently going nowhere for the rest of the arc.
+	airborne_animation = &""
 	if is_on_floor():
 		_set_animation_tree_active(true)
 
@@ -772,7 +1327,7 @@ func _set_animation_tree_active(value: bool) -> void:
 
 func _on_weapon_fired() -> void:
 	# The crosshair pulse is the HUD's, connected to `fired` in bind_player.
-	if is_dead or animation_tree == null or not animation_tree.active:
+	if _is_incapacitated() or animation_tree == null or not animation_tree.active:
 		return
 	var horizontal_speed := Vector2(velocity.x, velocity.z).length()
 	fire_animation_node.animation = _find_animation([
@@ -785,7 +1340,7 @@ func _on_weapon_fired() -> void:
 
 
 func _on_reload_started(duration: float) -> void:
-	if is_dead or animation_tree == null or not animation_tree.active:
+	if _is_incapacitated() or animation_tree == null or not animation_tree.active:
 		return
 	var reload_animation := _find_animation([&"reload"])
 	var playback_speed := 1.0

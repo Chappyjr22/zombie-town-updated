@@ -35,9 +35,17 @@ const DIRECTIONS := {
 ## which is a jog rather than a walk - the player moves at 4.5 m/s.
 const TIERS: Array[StringName] = [&"normal", &"sprint", &"crouch"]
 
+## Optional per-set key for the one-shot played when a weapon from that set is
+## drawn (see player.gd's _on_weapon_changed). Deliberately left out of
+## clip_paths()'s hard requirements - a set with no draw clip on disk yet just
+## keeps the instant swap it has today; _install_extra_clips() already skips
+## missing files rather than failing, so this needs no fallback logic of its
+## own beyond that.
 const SETS := {
 	&"rifle": {
 		"dir": "res://assets/animations/rifle",
+		"draw": &"draw",
+		"holster": &"holster",
 		## Not the 8-way pack's own `idle_aiming`, which is also on disk. This one
 		## is a separate Mixamo download that carries the weapon 6.8cm higher with
 		## the hands 5.8cm further apart - a braced hold rather than a relaxed one.
@@ -82,10 +90,9 @@ const SETS := {
 			&"backward_right": &"walk_crouching_backward_right",
 		},
 	},
-	## The pistol pack covers less ground than the rifle one, so three things are
+	## The pistol pack covers less ground than the rifle one, so two things are
 	## deliberately reused rather than left missing:
 	##
-	## - **Sprint repeats the run set.** The pack has no sprint at all.
 	## - **Crouch repeats the walk set**, so the character keeps a pistol stance
 	##   while the capsule shrinks, but doesn't visually crouch. There is no
 	##   pistol crouch-walk; `kneeling_idle` is a kneel, not a gait.
@@ -95,8 +102,17 @@ const SETS := {
 	## "Arc" clips are curving runs, which is what stands in for the diagonals -
 	## `walk_arc` drifts x -0.397 (the character's right) and `walk_arc_2` +0.479
 	## (their left), which is how each was identified.
+	##
+	## **Sprint is one clip (forward only) reused across all eight directions**,
+	## not eight distinct captures the way the rifle pack has - only one was
+	## pulled. Still counts as "distinct" from normal (has_distinct_sprint()
+	## just compares the two dictionaries), so it gets the real sprint-blend
+	## crossfade instead of the timescale-speedup fallback; strafing/backing up
+	## while sprinting will look like the forward clip played sideways until
+	## real per-direction captures replace it.
 	&"pistol": {
 		"dir": "res://assets/animations/pistol",
+		"draw": &"draw",
 		"idle": &"idle",
 		"crouch_idle": &"kneeling_idle",
 		"jump_up": &"jump",
@@ -113,14 +129,14 @@ const SETS := {
 			&"backward_right": &"run_backward_arc_2",
 		},
 		"sprint": {
-			&"forward": &"run",
-			&"forward_left": &"run_arc_2",
-			&"forward_right": &"run_arc",
-			&"left": &"strafe",
-			&"right": &"strafe_2",
-			&"backward": &"run_backward",
-			&"backward_left": &"run_backward_arc",
-			&"backward_right": &"run_backward_arc_2",
+			&"forward": &"sprint",
+			&"forward_left": &"sprint",
+			&"forward_right": &"sprint",
+			&"left": &"sprint",
+			&"right": &"sprint",
+			&"backward": &"sprint",
+			&"backward_left": &"sprint",
+			&"backward_right": &"sprint",
 		},
 		"crouch": {
 			&"forward": &"walk",
@@ -166,6 +182,41 @@ static func clip_paths(set_name: StringName) -> Dictionary:
 ## installed name or one would overwrite the other.
 static func installed_name(set_name: StringName, clip: StringName) -> StringName:
 	return StringName("%s_%s" % [set_name, clip])
+
+
+## The draw clip's own path, or "" if this set defines none yet. Kept separate
+## from clip_paths() on purpose: that dictionary feeds _has_locomotion_clips()'s
+## all-or-nothing check, and a missing draw clip should cost a weapon its draw
+## animation, not the entire locomotion tree.
+static func draw_clip_path(set_name: StringName) -> String:
+	var definition := get_set(set_name)
+	if not definition.has("draw"):
+		return ""
+	return "%s/%s.res" % [definition.dir, definition["draw"]]
+
+
+static func draw_clip_installed_name(set_name: StringName) -> StringName:
+	var definition := get_set(set_name)
+	if not definition.has("draw"):
+		return &""
+	return installed_name(set_name, definition["draw"])
+
+
+## Same shape as draw_clip_path/draw_clip_installed_name above, for the
+## one-shot played on the *outgoing* weapon before a switch - see
+## WeaponController.equip_slot() and Player.play_holster_animation().
+static func holster_clip_path(set_name: StringName) -> String:
+	var definition := get_set(set_name)
+	if not definition.has("holster"):
+		return ""
+	return "%s/%s.res" % [definition.dir, definition["holster"]]
+
+
+static func holster_clip_installed_name(set_name: StringName) -> StringName:
+	var definition := get_set(set_name)
+	if not definition.has("holster"):
+		return &""
+	return installed_name(set_name, definition["holster"])
 
 
 ## Whether the set's sprint tier is actually its own clips rather than a repeat of
