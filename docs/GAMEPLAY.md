@@ -4,31 +4,18 @@
 
 Build and get fun before adding meta-progression:
 
-1. ~~First-person movement + camera~~ — done (`scripts/player/player.gd`)
-2. ~~Weapon equip/fire/reload, hooked to the models and sounds already in `assets/`~~ — done (`scripts/weapons/`)
-3. ~~Zombie AI: chase, attack, die (with ragdoll — see below)~~ — done (`scripts/ai/zombie.gd`), except the ragdoll needs one manual in-editor step, see `scripts/ai/CLAUDE.md`
-4. Basic round-based waves (zombies spawn in increasing numbers/difficulty per round) — not started; `test_arena.tscn` currently just hand-places 3 zombies
+This list predates most of what's actually built now and is kept only for the items still genuinely true - see each system's own `CLAUDE.md` for current, maintained status: `scripts/player/`, `scripts/weapons/`, `scripts/ai/`, `scripts/economy/`, `scripts/ui/`. The round loop, points economy, perks, Pack-a-Punch, mystery box, and pause menu are all built.
 
-## Deferred (not in scope yet)
+## Tier 6 — deferred until closer to release
 
-Explicitly out of scope until the core loop is fun on its own — revisit after playtesting:
+Explicitly held back rather than built now (user decision) - core gameplay and its editor-facing polish come first:
 
-- Points economy
-- Mystery box / weapon randomization
-- Pack-a-Punch weapon upgrades
-- Perks
-- Power-ups
-- Boss rounds (e.g. a "Brute"-style heavy enemy)
-
-These were all present in the earlier three.js prototype (`chappyjr22/zombie-town-online`) and are worth revisiting as design references later, but are not being ported now.
+- **Boss rounds.** Not built. The old three.js prototype (`chappyjr22/zombie-town-online`) ran one every 10th round (`6000 + max(0, r-10)*550` health, 1.48× scale, one boss plus ten escorts) and has a CC0 boss model with provenance already checked (`public/models/boss-zombie/boss-zombie.glb` in that repo, `LICENSE.txt` alongside it) - not pulled into this project yet. The user has a boss model in mind and wants core gameplay solid before adding this.
+- **Zombie downed/crawl state.** Not built. `Crawl`/`CrawlRun` clips are already imported on both Mixamo zombie variants (`ASSET_MANIFEST.md`) but nothing selects them - the AI state machine is `IDLE`/`CHASE`/`ATTACK`/`DEAD` only, see `scripts/ai/CLAUDE.md`. (Not to be confused with the *player's* downed/self-revive state, which exists - `scripts/player/player.gd`, gated on the Quick Revive perk.)
+- **Networking.** Not built beyond a single-player-scoped `GameState` autoload holding last-run stats. Full design in `docs/MULTIPLAYER.md`; `scripts/networking/CLAUDE.md` tracks current status. Recommended to hold off until the core single-player loop is stable - retrofitting host authority onto gameplay systems is more expensive after the fact than designing it in from the start.
 
 ## Zombie ragdoll on death
 
-The old three.js prototype implemented ragdolls from scratch: a hand-rolled 15-point Verlet-integration skeleton with distance constraints, because three.js has no built-in skeletal physics. That complexity doesn't carry over — Godot has ragdolls built in:
+**Superseded — see `scripts/ai/CLAUDE.md`'s "round 7" entry for the full account.** The plan below (Godot's built-in `PhysicalBone3D` simulation) was implemented and tested through seven rounds of fixes - bones launching on scene start, T-posing instead of ragdolling, corpses stretching into spikes - and ultimately abandoned in favor of a canned `Death` animation clip, which is what `zombie.gd` uses today. The infrastructure (`PhysicsLayers.RAGDOLL`, `_isolate_ragdoll_bones()`, `_ragdoll_bone_names()`) is still in the file, unused. Revisiting it is Tier 4 work, not Tier 6, and per that file's own notes needs hands-on per-bone joint tuning in the editor rather than more blind code changes - the original plan text is kept below only as background on what was tried and why it's a dead end without that.
 
-- Zombie models (`assets/models/zombies/*.glb`) are rigged with a `Skeleton3D`.
-- On death: stop the `AnimationPlayer`, call `Skeleton3D.physical_bones_start_simulation()` (requires `PhysicalBone3D` nodes configured under the skeleton — set up once per zombie scene, not per instance), and apply an impulse to the hit bone in the direction/force of the killing shot.
-- Godot's physics engine takes it from there — no custom simulation code needed. (Jolt Physics is available as of 4.3 and became the default in 4.4; either it or the built-in GodotPhysics3D handles PhysicalBone3D ragdolls fine.)
-- `physical_bones_stop_simulation()` + blending back to animation is NOT needed for zombies (they stay dead), unlike a game that revives ragdolled characters.
-
-Implementation is in `scripts/ai/zombie.gd`. **The `PhysicalBone3D` setup itself is a one-time manual step in the Godot editor** (Skeleton3D → "Create Physical Skeleton") that this session couldn't perform without editor access — full instructions in `scripts/ai/CLAUDE.md`. The death/ragdoll-trigger code is already written and safe to run either way (it's a no-op until that step is done, not an error).
+The old three.js prototype implemented ragdolls from scratch: a hand-rolled 15-point Verlet-integration skeleton with distance constraints, because three.js has no built-in skeletal physics. That complexity doesn't carry over — Godot has ragdolls built in, which is what the abandoned attempt above used instead.
