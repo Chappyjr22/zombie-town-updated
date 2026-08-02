@@ -20,6 +20,10 @@ run/main_scene="res://scenes/levels/main_menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 
+[autoload]
+
+GameState="*res://scripts/networking/game_state.gd"
+
 [input]
 
 move_forward={
