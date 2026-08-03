@@ -11,7 +11,7 @@ Free assets only, license-checked before use. Preferred sources, roughly in orde
 | Zombie base model + animations | Mixamo (retarget a humanoid, reskin) or Sketchfab |
 | Guns | Kenney.nl weapon packs, Sketchfab (CC) |
 | Vehicles | Kenney.nl, Quaternius |
-| Environment props | Kenney.nl, OpenGameArt.org |
+| Environment props | Kenney.nl, OpenGameArt.org, or Meshy AI generation — see below |
 | Textures / PBR materials | Poly Haven |
 
 ## Adding a new asset — checklist
@@ -42,6 +42,21 @@ Checking that a rigged humanoid has bones named `Hand`, `ForeArm` and so on prov
 2. Does it ship **first-person** idle / walk / sprint / fire / reload?
 
 If either answer is no, it's a world model.
+
+## AI-generated environment assets (Meshy)
+
+Evaluated as a third sourcing option alongside the free (Kenney) and paid packs already tracked in `ASSET_MANIFEST.md`. Three test generations (an abandoned house, a fenced backyard, a rubble/debris pile) via [meshy.ai](https://www.meshy.ai) established a working process and real limitations — verified by measuring and rendering each result, never by trusting the in-app preview alone:
+
+- **Never trust raw generation for scale.** Text-prompt dimensions get ignored — one generation came out 1.8m instead of the requested 6m, wrong non-uniformly on every axis, not just smaller. Meshy's export dialog (Resize on, explicit Height in cm, Origin: Bottom) is reliable instead — nailed the target height exactly across three separate generations. Always use the export dialog for scale; never rely on prompt text for it.
+- **Thin/lattice geometry fails; solid/blocky forms don't.** Vines and a chain-link fence both broke — the fence rendered as bare posts and one sagging wire with no fabric at all, despite a clean concept image. This isn't fixable by adding "no thin geometry" to a prompt that still needs a fence — it means don't ask this tool for that category of object as real geometry at all. Solid forms (brick, concrete, dumpsters, rubble) come out well consistently.
+- **Raw polycount is unpredictable and ignores prompt requests.** Asking for "optimized/low-to-mid polygon count" in the prompt did nothing — a small debris pile still came out at 1.38M triangles. A follow-up remesh pass with an explicit numeric target (not a vague description) is required, and that part *is* honored precisely (asked for 5,000-6,000 tris, got 5,707).
+- **The remesh step drops normal maps even when explicitly told to preserve them** (confirmed twice). Visual impact is smaller than expected — a lot of perceived depth is already baked into the albedo texture's shading — but don't rely on it. If true normal-mapped detail matters later, bake one manually in Blender from the pre-remesh high-poly source, don't re-prompt Meshy for it.
+- **Lock mood/lighting to flat/diffuse options** ("overcast," not "golden hour"). Directional lighting gets baked into the diffuse texture and will clash with Godot's own dynamic lighting once the asset is actually in a scene.
+- **Match palette across separate generations deliberately.** Nothing enforces consistency between prompts on its own — picking answers that echo an already-generated asset's color language is what kept multiple pieces reading as one coherent world instead of several.
+
+**Working process**: Image to 3D (concept image first, not straight Text to 3D) → lock mood/lighting (flat/diffuse) and palette (match existing assets) → generate → prefer the triangle mesh over quad if offered (Godot triangulates on import regardless; quad topology only matters for hand-editing in a DCC tool) → at export, Resize on with explicit real-world Height in cm, Origin: Bottom → if polycount looks large, remesh with an explicit target triangle count and re-verify before trusting it.
+
+**Status**: proven at prop/small-structure scale. Full map/environment-scale generation not yet tested — free (Kenney) and paid sourcing options remain the fallback if that doesn't hold up.
 
 ## Realism/quality bar
 

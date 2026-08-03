@@ -4,6 +4,8 @@ assets/models/zombies/cop_zombie_*.png filter=lfs diff=lfs merge=lfs -text
 assets/models/characters/mixamo_soldier.glb filter=lfs diff=lfs merge=lfs -text
 assets/models/characters/mixamo_soldier_*.png filter=lfs diff=lfs merge=lfs -text
 assets/models/zombies/scary_zombie.glb filter=lfs diff=lfs merge=lfs -text
+assets/models/props/maple_row/*.glb filter=lfs diff=lfs merge=lfs -text
+assets/models/props/maple_row/*.png filter=lfs diff=lfs merge=lfs -text
 
 # Godot always writes these as LF regardless of platform. core.autocrlf=true
 # on Windows was flagging them as modified on every checkout even when byte-
